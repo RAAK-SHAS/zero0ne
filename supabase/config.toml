@@ -1,1 +1,4 @@
 project_id = "ttrbjdpiccvfaccwpodu"
+
+[functions.get-shared-file]
+verify_jwt = false

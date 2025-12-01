@@ -29,27 +29,17 @@ const Share = () => {
 
   const loadFile = async () => {
     try {
-      const { data: share, error: shareError } = await supabase
-        .from('shares')
-        .select('file_id, expires_at')
-        .eq('token', token)
-        .single();
+      const { data, error } = await supabase.functions.invoke('get-shared-file', {
+        body: { token }
+      });
 
-      if (shareError) throw new Error('Invalid or expired share link');
+      if (error) throw error;
 
-      if (share.expires_at && new Date(share.expires_at) < new Date()) {
-        throw new Error('This share link has expired');
+      if (data?.file) {
+        setFile(data.file);
+      } else {
+        throw new Error('Invalid or expired share link');
       }
-
-      const { data: fileData, error: fileError } = await supabase
-        .from('files')
-        .select('*')
-        .eq('id', share.file_id)
-        .single();
-
-      if (fileError) throw fileError;
-
-      setFile(fileData);
     } catch (error: any) {
       toast.error(error.message || 'Failed to load file');
     } finally {
@@ -62,14 +52,18 @@ const Share = () => {
 
     setDownloading(true);
     try {
-      const { data, error } = await supabase.storage
-        .from('user-files')
-        .createSignedUrl(file.storage_path, 60);
+      const { data, error } = await supabase.functions.invoke('get-shared-file', {
+        body: { token }
+      });
 
       if (error) throw error;
 
-      window.open(data.signedUrl, '_blank');
-      toast.success('Opening file...');
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+        toast.success('Opening file...');
+      } else {
+        throw new Error('Failed to generate download link');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to download file');
     } finally {
