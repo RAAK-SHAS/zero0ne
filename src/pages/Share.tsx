@@ -3,8 +3,11 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Download, Cloud, File as FileIcon } from 'lucide-react';
+import { Download, Cloud, Lock } from 'lucide-react';
+import { FileIcon } from '@/components/FileIcon';
 import { formatBytes } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -22,29 +25,55 @@ const Share = () => {
   const [file, setFile] = useState<FileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadFile();
   }, [token]);
 
-  const loadFile = async () => {
+  const loadFile = async (pwd?: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('get-shared-file', {
-        body: { token }
+        body: { token, password: pwd }
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes('Password required') || error.message.includes('Incorrect password')) {
+          setPasswordRequired(true);
+          if (pwd) {
+            setError('Incorrect password');
+          }
+          return;
+        }
+        throw error;
+      }
 
       if (data?.file) {
         setFile(data.file);
+        setPasswordRequired(false);
+        setError('');
+      } else if (data?.error === 'Share link has expired') {
+        setError('expired');
       } else {
         throw new Error('Invalid or expired share link');
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to load file');
+      if (error.message.includes('expired')) {
+        setError('expired');
+      } else {
+        toast.error(error.message || 'Failed to load file');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    loadFile(password);
   };
 
   const handleDownload = async () => {
@@ -53,7 +82,7 @@ const Share = () => {
     setDownloading(true);
     try {
       const { data, error } = await supabase.functions.invoke('get-shared-file', {
-        body: { token }
+        body: { token, password }
       });
 
       if (error) throw error;
@@ -82,6 +111,55 @@ const Share = () => {
     );
   }
 
+  if (error === 'expired') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-accent/20 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <Cloud className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <CardTitle>Link Expired</CardTitle>
+            <CardDescription>This share link has expired and is no longer accessible</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  if (passwordRequired && !file) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-accent/20 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <Lock className="h-12 w-12 text-primary mx-auto mb-4" />
+            <CardTitle>Password Protected</CardTitle>
+            <CardDescription>This file is password protected</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="password">Enter Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  required
+                />
+                {error && (
+                  <p className="text-sm text-destructive">{error}</p>
+                )}
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Verifying...' : 'Access File'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!file) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-accent/20 p-4">
@@ -106,7 +184,13 @@ const Share = () => {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center gap-4 p-4 border rounded-lg">
-            <FileIcon className="h-10 w-10 text-primary flex-shrink-0" />
+            <FileIcon 
+              fileName={file.name}
+              mimeType={file.mime_type}
+              storagePath={file.storage_path}
+              className="h-10 w-10"
+              showThumbnail
+            />
             <div className="min-w-0 flex-1">
               <p className="font-medium truncate">{file.name}</p>
               <div className="flex gap-2 text-sm text-muted-foreground">

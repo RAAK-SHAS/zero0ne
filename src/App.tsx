@@ -11,6 +11,7 @@ import Register from "./pages/auth/Register";
 import Dashboard from "./pages/Dashboard";
 import Upload from "./pages/Upload";
 import Share from "./pages/Share";
+import Trash from "./pages/Trash";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/auth/register" element={<Register />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
+            <Route path="/trash" element={<ProtectedRoute><Trash /></ProtectedRoute>} />
             <Route path="/share/:token" element={<Share />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
