@@ -14,11 +14,52 @@ export type Database = {
   }
   public: {
     Tables: {
+      file_versions: {
+        Row: {
+          created_at: string
+          created_by: string
+          file_id: string
+          id: string
+          size_bytes: number
+          storage_path: string
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          file_id: string
+          id?: string
+          size_bytes: number
+          storage_path: string
+          version_number: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          file_id?: string
+          id?: string
+          size_bytes?: number
+          storage_path?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_versions_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       files: {
         Row: {
           created_at: string
           deleted_at: string | null
+          encryption_algorithm: string | null
+          encryption_metadata: Json | null
           id: string
+          is_encrypted: boolean | null
           mime_type: string | null
           name: string
           size_bytes: number
@@ -28,7 +69,10 @@ export type Database = {
         Insert: {
           created_at?: string
           deleted_at?: string | null
+          encryption_algorithm?: string | null
+          encryption_metadata?: Json | null
           id?: string
+          is_encrypted?: boolean | null
           mime_type?: string | null
           name: string
           size_bytes: number
@@ -38,7 +82,10 @@ export type Database = {
         Update: {
           created_at?: string
           deleted_at?: string | null
+          encryption_algorithm?: string | null
+          encryption_metadata?: Json | null
           id?: string
+          is_encrypted?: boolean | null
           mime_type?: string | null
           name?: string
           size_bytes?: number

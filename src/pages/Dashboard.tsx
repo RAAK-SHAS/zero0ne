@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,8 +8,13 @@ import { FileList } from '@/components/FileList';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ShareModal } from '@/components/ShareModal';
 import { RenameDialog } from '@/components/RenameDialog';
+import { FilePreview } from '@/components/FilePreview';
+import { VersionHistory } from '@/components/VersionHistory';
+import { EncryptionDialog } from '@/components/EncryptionDialog';
+import { BatchActions } from '@/components/BatchActions';
+import { SearchFilter } from '@/components/SearchFilter';
 import { toast } from 'sonner';
-import { Upload, Cloud, LogOut, Trash2, ArrowUpDown } from 'lucide-react';
+import { Upload, Cloud, LogOut, Trash2, ArrowUpDown, Loader2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -27,15 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useDropzone } from 'react-dropzone';
 
 interface Profile {
   storage_used_bytes: number;
@@ -49,6 +46,7 @@ interface FileItem {
   mime_type: string | null;
   storage_path: string;
   created_at: string;
+  is_encrypted?: boolean;
 }
 
 const Dashboard = () => {
@@ -58,11 +56,19 @@ const Dashboard = () => {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteFileId, setDeleteFileId] = useState<string | null>(null);
+  const [shareFileId, setShareFileId] = useState<string | null>(null);
   const [shareDialog, setShareDialog] = useState(false);
   const [shareLink, setShareLink] = useState('');
   const [shareToken, setShareToken] = useState('');
   const [renameFileId, setRenameFileId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [versionHistoryFileId, setVersionHistoryFileId] = useState<string | null>(null);
+  const [encryptFileId, setEncryptFileId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -74,7 +80,7 @@ const Dashboard = () => {
     try {
       const [profileRes, filesRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('files').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+        supabase.from('files').select('*').is('deleted_at', null).order('created_at', { ascending: false })
       ]);
 
       if (profileRes.error) throw profileRes.error;
@@ -88,6 +94,60 @@ const Dashboard = () => {
       setLoading(false);
     }
   };
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length === 0) return;
+    
+    setUploading(true);
+
+    for (const file of acceptedFiles) {
+      try {
+        // Check storage quota
+        const { data: currentProfile } = await supabase
+          .from('profiles')
+          .select('storage_used_bytes, storage_quota_bytes')
+          .single();
+
+        if (currentProfile && currentProfile.storage_used_bytes + file.size > currentProfile.storage_quota_bytes) {
+          toast.error(`Not enough storage space for ${file.name}`);
+          continue;
+        }
+
+        // Upload file
+        const filePath = `${user?.id}/${Date.now()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from('user-files')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        // Create database record
+        const { error: dbError } = await supabase
+          .from('files')
+          .insert({
+            name: file.name,
+            size_bytes: file.size,
+            mime_type: file.type,
+            storage_path: filePath,
+            user_id: user!.id
+          });
+
+        if (dbError) throw dbError;
+      } catch (error) {
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+
+    setUploading(false);
+    await loadData();
+    toast.success(`${acceptedFiles.length} file(s) uploaded successfully`);
+  }, [user]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
+    onDrop,
+    noClick: true,
+    noKeyboard: true
+  });
 
   const handleDownload = async (fileId: string) => {
     try {
@@ -107,6 +167,24 @@ const Dashboard = () => {
     }
   };
 
+  const handlePreview = async (fileId: string) => {
+    try {
+      const file = files.find(f => f.id === fileId);
+      if (!file) return;
+
+      const { data, error } = await supabase.storage
+        .from('user-files')
+        .createSignedUrl(file.storage_path, 3600);
+
+      if (error) throw error;
+      
+      setPreviewFile(file);
+      setPreviewUrl(data.signedUrl);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load preview');
+    }
+  };
+
   const handleShare = async (fileId: string) => {
     try {
       const { data, error } = await supabase
@@ -120,6 +198,7 @@ const Dashboard = () => {
       const link = `${window.location.origin}/share/${data.token}`;
       setShareLink(link);
       setShareToken(data.token);
+      setShareFileId(fileId);
       setShareDialog(true);
       
       navigator.clipboard.writeText(link);
@@ -142,7 +221,6 @@ const Dashboard = () => {
       }
 
       if (password) {
-        // Hash password using Web Crypto API
         const encoder = new TextEncoder();
         const data = encoder.encode(password);
         const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -204,17 +282,54 @@ const Dashboard = () => {
     }
   };
 
-  const sortedFiles = [...files].sort((a, b) => {
-    switch (sortBy) {
-      case 'name':
-        return a.name.localeCompare(b.name);
-      case 'size':
-        return b.size_bytes - a.size_bytes;
-      case 'date':
-      default:
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  const handleSelectFile = (fileId: string) => {
+    setSelectedFiles(prev => 
+      prev.includes(fileId) 
+        ? prev.filter(id => id !== fileId)
+        : [...prev, fileId]
+    );
+  };
+
+  const handleSelectAll = (selected: boolean) => {
+    setSelectedFiles(selected ? filteredAndSortedFiles.map(f => f.id) : []);
+  };
+
+  const handleBatchDownload = async () => {
+    for (const fileId of selectedFiles) {
+      await handleDownload(fileId);
     }
-  });
+    setSelectedFiles([]);
+  };
+
+  const handleBatchShare = async () => {
+    if (selectedFiles.length === 1) {
+      handleShare(selectedFiles[0]);
+    } else {
+      toast.info('Batch sharing coming soon');
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedFiles.length > 0) {
+      setDeleteFileId(selectedFiles[0]); // Simplified for now
+    }
+  };
+
+  const filteredAndSortedFiles = files
+    .filter(file => 
+      file.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'size':
+          return b.size_bytes - a.size_bytes;
+        case 'date':
+        default:
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+    });
 
   if (loading) {
     return (
@@ -228,7 +343,30 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-accent/20">
+    <div 
+      {...getRootProps()} 
+      className="min-h-screen bg-gradient-to-br from-background to-accent/20"
+    >
+      <input {...getInputProps()} />
+      
+      {isDragActive && (
+        <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-card p-8 rounded-lg border-2 border-dashed border-primary">
+            <Upload className="h-16 w-16 mx-auto mb-4 text-primary" />
+            <p className="text-xl font-medium">Drop files here to upload</p>
+          </div>
+        </div>
+      )}
+
+      {uploading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-card p-8 rounded-lg shadow-lg">
+            <Loader2 className="h-12 w-12 mx-auto mb-4 text-primary animate-spin" />
+            <p className="text-lg font-medium">Uploading files...</p>
+          </div>
+        </div>
+      )}
+
       <header className="border-b bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -249,17 +387,18 @@ const Dashboard = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-6xl mx-auto space-y-6">
           <div className="bg-card rounded-lg p-6 shadow-lg">
             <StorageBar
               used={profile?.storage_used_bytes || 0}
-              total={profile?.storage_quota_bytes || 10737418240}
+              total={profile?.storage_quota_bytes || 107374182400}
             />
           </div>
 
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-2xl font-bold">My Files</h2>
             <div className="flex gap-2 w-full sm:w-auto">
+              <SearchFilter value={searchQuery} onChange={setSearchQuery} />
               <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
                 <SelectTrigger className="w-[140px]">
                   <ArrowUpDown className="h-4 w-4 mr-2" />
@@ -271,24 +410,38 @@ const Dashboard = () => {
                   <SelectItem value="size">Size</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => navigate('/upload')} className="flex-1 sm:flex-none">
+              <Button onClick={() => navigate('/upload')}>
                 <Upload className="h-4 w-4 mr-2" />
-                Upload File
+                Upload
               </Button>
             </div>
           </div>
 
           <div className="bg-card rounded-lg p-6 shadow-lg">
             <FileList
-              files={sortedFiles}
+              files={filteredAndSortedFiles}
+              selectedFiles={selectedFiles}
+              onSelectFile={handleSelectFile}
+              onSelectAll={handleSelectAll}
               onDownload={handleDownload}
               onShare={handleShare}
               onDelete={(id) => setDeleteFileId(id)}
               onRename={(id) => setRenameFileId(id)}
+              onPreview={handlePreview}
+              onEncrypt={(id) => setEncryptFileId(id)}
+              onVersionHistory={(id) => setVersionHistoryFileId(id)}
             />
           </div>
         </div>
       </main>
+
+      <BatchActions
+        selectedCount={selectedFiles.length}
+        onDownload={handleBatchDownload}
+        onShare={handleBatchShare}
+        onDelete={handleBatchDelete}
+        onClear={() => setSelectedFiles([])}
+      />
 
       <AlertDialog open={!!deleteFileId} onOpenChange={() => setDeleteFileId(null)}>
         <AlertDialogContent>
@@ -317,6 +470,33 @@ const Dashboard = () => {
         onOpenChange={(open) => !open && setRenameFileId(null)}
         currentName={files.find(f => f.id === renameFileId)?.name || ''}
         onRename={handleRename}
+      />
+
+      <FilePreview
+        file={previewFile}
+        downloadUrl={previewUrl}
+        open={!!previewFile}
+        onClose={() => {
+          setPreviewFile(null);
+          setPreviewUrl(null);
+        }}
+        onDownload={() => previewFile && handleDownload(previewFile.id)}
+      />
+
+      <VersionHistory
+        fileId={versionHistoryFileId}
+        fileName={files.find(f => f.id === versionHistoryFileId)?.name || ''}
+        open={!!versionHistoryFileId}
+        onClose={() => setVersionHistoryFileId(null)}
+      />
+
+      <EncryptionDialog
+        fileId={encryptFileId}
+        fileName={files.find(f => f.id === encryptFileId)?.name || ''}
+        isEncrypted={files.find(f => f.id === encryptFileId)?.is_encrypted || false}
+        open={!!encryptFileId}
+        onClose={() => setEncryptFileId(null)}
+        onSuccess={loadData}
       />
     </div>
   );
