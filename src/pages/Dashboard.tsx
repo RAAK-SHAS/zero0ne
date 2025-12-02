@@ -6,8 +6,17 @@ import { Button } from '@/components/ui/button';
 import { StorageBar } from '@/components/StorageBar';
 import { FileList } from '@/components/FileList';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { ShareModal } from '@/components/ShareModal';
+import { RenameDialog } from '@/components/RenameDialog';
 import { toast } from 'sonner';
-import { Upload, Cloud, LogOut } from 'lucide-react';
+import { Upload, Cloud, LogOut, Trash2, ArrowUpDown } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +60,9 @@ const Dashboard = () => {
   const [deleteFileId, setDeleteFileId] = useState<string | null>(null);
   const [shareDialog, setShareDialog] = useState(false);
   const [shareLink, setShareLink] = useState('');
+  const [shareToken, setShareToken] = useState('');
+  const [renameFileId, setRenameFileId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
 
   useEffect(() => {
     loadData();
@@ -107,6 +119,7 @@ const Dashboard = () => {
 
       const link = `${window.location.origin}/share/${data.token}`;
       setShareLink(link);
+      setShareToken(data.token);
       setShareDialog(true);
       
       navigator.clipboard.writeText(link);
@@ -116,34 +129,92 @@ const Dashboard = () => {
     }
   };
 
+  const handleUpdateShare = async (expirationDays: number | null, password: string | null) => {
+    try {
+      const updates: any = {};
+      
+      if (expirationDays !== null) {
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + expirationDays);
+        updates.expires_at = expiresAt.toISOString();
+      } else {
+        updates.expires_at = null;
+      }
+
+      if (password) {
+        // Hash password using Web Crypto API
+        const encoder = new TextEncoder();
+        const data = encoder.encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        updates.password_hash = hashHex;
+      } else {
+        updates.password_hash = null;
+      }
+
+      const { error } = await supabase
+        .from('shares')
+        .update(updates)
+        .eq('token', shareToken);
+
+      if (error) throw error;
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
+  const handleRename = async (newName: string) => {
+    if (!renameFileId) return;
+
+    try {
+      const { error } = await supabase
+        .from('files')
+        .update({ name: newName })
+        .eq('id', renameFileId);
+
+      if (error) throw error;
+
+      toast.success('File renamed successfully');
+      loadData();
+      setRenameFileId(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to rename file');
+      throw error;
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteFileId) return;
 
     try {
-      const file = files.find(f => f.id === deleteFileId);
-      if (!file) return;
-
-      const { error: storageError } = await supabase.storage
-        .from('user-files')
-        .remove([file.storage_path]);
-
-      if (storageError) throw storageError;
-
-      const { error: dbError } = await supabase
+      const { error } = await supabase
         .from('files')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', deleteFileId);
 
-      if (dbError) throw dbError;
+      if (error) throw error;
 
-      toast.success('File deleted successfully');
+      toast.success('File moved to trash');
       loadData();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to delete file');
+      toast.error(error.message || 'Failed to move file to trash');
     } finally {
       setDeleteFileId(null);
     }
   };
+
+  const sortedFiles = [...files].sort((a, b) => {
+    switch (sortBy) {
+      case 'name':
+        return a.name.localeCompare(b.name);
+      case 'size':
+        return b.size_bytes - a.size_bytes;
+      case 'date':
+      default:
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+  });
 
   if (loading) {
     return (
@@ -165,6 +236,10 @@ const Dashboard = () => {
             <h1 className="text-xl font-bold">CloudStore</h1>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/trash')}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Trash
+            </Button>
             <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={signOut}>
               <LogOut className="h-5 w-5" />
@@ -182,20 +257,34 @@ const Dashboard = () => {
             />
           </div>
 
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-2xl font-bold">My Files</h2>
-            <Button onClick={() => navigate('/upload')}>
-              <Upload className="h-4 w-4 mr-2" />
-              Upload File
-            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                <SelectTrigger className="w-[140px]">
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date">Date</SelectItem>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="size">Size</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={() => navigate('/upload')} className="flex-1 sm:flex-none">
+                <Upload className="h-4 w-4 mr-2" />
+                Upload File
+              </Button>
+            </div>
           </div>
 
           <div className="bg-card rounded-lg p-6 shadow-lg">
             <FileList
-              files={files}
+              files={sortedFiles}
               onDownload={handleDownload}
               onShare={handleShare}
               onDelete={(id) => setDeleteFileId(id)}
+              onRename={(id) => setRenameFileId(id)}
             />
           </div>
         </div>
@@ -204,32 +293,31 @@ const Dashboard = () => {
       <AlertDialog open={!!deleteFileId} onOpenChange={() => setDeleteFileId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete File</AlertDialogTitle>
+            <AlertDialogTitle>Move to Trash</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this file? This action cannot be undone.
+              This file will be moved to trash and automatically deleted after 30 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete}>Move to Trash</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={shareDialog} onOpenChange={setShareDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Share File</DialogTitle>
-            <DialogDescription>
-              Anyone with this link can download the file
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label>Share Link</Label>
-            <Input value={shareLink} readOnly onClick={(e) => e.currentTarget.select()} />
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ShareModal
+        open={shareDialog}
+        onOpenChange={setShareDialog}
+        shareLink={shareLink}
+        onUpdateShare={handleUpdateShare}
+      />
+
+      <RenameDialog
+        open={!!renameFileId}
+        onOpenChange={(open) => !open && setRenameFileId(null)}
+        currentName={files.find(f => f.id === renameFileId)?.name || ''}
+        onRename={handleRename}
+      />
     </div>
   );
 };

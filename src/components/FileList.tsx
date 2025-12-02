@@ -1,4 +1,5 @@
-import { File as FileIcon, MoreVertical, Download, Share2, Trash2 } from 'lucide-react';
+import { MoreVertical, Download, Share2, Trash2, Edit2 } from 'lucide-react';
+import { FileIcon } from './FileIcon';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -22,13 +23,14 @@ interface FileListProps {
   onDownload: (fileId: string) => void;
   onShare: (fileId: string) => void;
   onDelete: (fileId: string) => void;
+  onRename: (fileId: string) => void;
 }
 
-export const FileList = ({ files, onDownload, onShare, onDelete }: FileListProps) => {
+export const FileList = ({ files, onDownload, onShare, onDelete, onRename }: FileListProps) => {
   if (files.length === 0) {
     return (
       <div className="text-center py-12">
-        <FileIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <FileIcon fileName="" mimeType={null} className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
         <p className="text-muted-foreground">No files yet. Upload your first file!</p>
       </div>
     );
@@ -42,7 +44,11 @@ export const FileList = ({ files, onDownload, onShare, onDelete }: FileListProps
           className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
         >
           <div className="flex items-center gap-4 flex-1 min-w-0">
-            <FileIcon className="h-8 w-8 text-primary flex-shrink-0" />
+            <FileIcon 
+              fileName={file.name}
+              mimeType={file.mime_type}
+              showThumbnail
+            />
             <div className="min-w-0 flex-1">
               <p className="font-medium truncate">{file.name}</p>
               <div className="flex gap-3 text-sm text-muted-foreground">
@@ -67,12 +73,16 @@ export const FileList = ({ files, onDownload, onShare, onDelete }: FileListProps
                 <Share2 className="h-4 w-4 mr-2" />
                 Share
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onRename(file.id)}>
+                <Edit2 className="h-4 w-4 mr-2" />
+                Rename
+              </DropdownMenuItem>
               <DropdownMenuItem 
                 onClick={() => onDelete(file.id)}
                 className="text-destructive"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Delete
+                Move to Trash
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

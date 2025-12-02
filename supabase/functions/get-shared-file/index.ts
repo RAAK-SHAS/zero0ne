@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { token } = await req.json();
+    const { token, password } = await req.json();
 
     if (!token) {
       return new Response(
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
     // Validate the share token and get file info
     const { data: share, error: shareError } = await supabaseAdmin
       .from('shares')
-      .select('file_id, expires_at')
+      .select('file_id, expires_at, password_hash')
       .eq('token', token)
       .single();
 
@@ -54,9 +54,34 @@ Deno.serve(async (req) => {
     if (share.expires_at && new Date(share.expires_at) < new Date()) {
       console.log('Share link has expired');
       return new Response(
-        JSON.stringify({ error: 'This share link has expired' }),
-        { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Share link has expired' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Check password if required
+    if (share.password_hash) {
+      if (!password) {
+        return new Response(
+          JSON.stringify({ error: 'Password required', passwordRequired: true }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Hash provided password using Web Crypto API
+      const encoder = new TextEncoder();
+      const data = encoder.encode(password);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      if (hashHex !== share.password_hash) {
+        console.log('Incorrect password provided');
+        return new Response(
+          JSON.stringify({ error: 'Incorrect password', passwordRequired: true }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Get file details
@@ -96,9 +121,11 @@ Deno.serve(async (req) => {
           name: file.name,
           size_bytes: file.size_bytes,
           mime_type: file.mime_type,
+          storage_path: file.storage_path,
           created_at: file.created_at
         },
-        signedUrl: signedUrlData.signedUrl
+        signedUrl: signedUrlData.signedUrl,
+        passwordRequired: !!share.password_hash
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

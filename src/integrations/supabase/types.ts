@@ -17,6 +17,7 @@ export type Database = {
       files: {
         Row: {
           created_at: string
+          deleted_at: string | null
           id: string
           mime_type: string | null
           name: string
@@ -26,6 +27,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
           mime_type?: string | null
           name: string
@@ -35,6 +37,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
           mime_type?: string | null
           name?: string
@@ -82,6 +85,7 @@ export type Database = {
           expires_at: string | null
           file_id: string
           id: string
+          password_hash: string | null
           token: string
         }
         Insert: {
@@ -89,6 +93,7 @@ export type Database = {
           expires_at?: string | null
           file_id: string
           id?: string
+          password_hash?: string | null
           token?: string
         }
         Update: {
@@ -96,6 +101,7 @@ export type Database = {
           expires_at?: string | null
           file_id?: string
           id?: string
+          password_hash?: string | null
           token?: string
         }
         Relationships: [
@@ -113,7 +119,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      cleanup_old_trash: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
