@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Loader2 } from 'lucide-react';
+import { Play, Loader2, Save } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -10,11 +10,64 @@ interface CodeEditorProps {
   language: string;
 }
 
+const getLanguageFromExtension = (ext: string): string => {
+  const languageMap: Record<string, string> = {
+    'js': 'javascript',
+    'jsx': 'javascript',
+    'ts': 'typescript',
+    'tsx': 'typescript',
+    'py': 'python',
+    'java': 'java',
+    'cpp': 'cpp',
+    'c': 'c',
+    'h': 'c',
+    'hpp': 'cpp',
+    'cs': 'csharp',
+    'go': 'go',
+    'rs': 'rust',
+    'rb': 'ruby',
+    'php': 'php',
+    'swift': 'swift',
+    'kt': 'kotlin',
+    'scala': 'scala',
+    'html': 'html',
+    'css': 'css',
+    'scss': 'scss',
+    'sass': 'sass',
+    'less': 'less',
+    'sql': 'sql',
+    'sh': 'bash',
+    'bash': 'bash',
+    'zsh': 'bash',
+    'ps1': 'powershell',
+    'r': 'r',
+    'lua': 'lua',
+    'perl': 'perl',
+    'dart': 'dart',
+    'vue': 'vue',
+    'svelte': 'svelte',
+    'json': 'json',
+    'xml': 'xml',
+    'yaml': 'yaml',
+    'yml': 'yaml',
+    'md': 'markdown',
+    'markdown': 'markdown',
+    'txt': 'text',
+    'ini': 'ini',
+    'conf': 'conf',
+    'env': 'env',
+    'log': 'log',
+  };
+  return languageMap[ext.toLowerCase()] || ext;
+};
+
 export const CodeEditor = ({ fileUrl, fileName, language }: CodeEditorProps) => {
   const [code, setCode] = useState<string>('');
   const [output, setOutput] = useState<string>('');
   const [isRunning, setIsRunning] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const resolvedLanguage = getLanguageFromExtension(language);
 
   useEffect(() => {
     fetch(fileUrl)
@@ -35,7 +88,7 @@ export const CodeEditor = ({ fileUrl, fileName, language }: CodeEditorProps) => 
 
     try {
       const { data, error } = await supabase.functions.invoke('run-code', {
-        body: { code, language }
+        body: { code, language: resolvedLanguage }
       });
 
       if (error) throw error;
@@ -47,26 +100,34 @@ export const CodeEditor = ({ fileUrl, fileName, language }: CodeEditorProps) => 
     }
   };
 
-  const canRun = ['python', 'javascript', 'typescript', 'js', 'ts', 'py', 'java', 'cpp', 'c'].includes(language);
+  const canRun = ['python', 'javascript', 'typescript', 'js', 'ts', 'py', 'java', 'cpp', 'c'].includes(resolvedLanguage);
 
   if (loading) {
-    return <div className="flex items-center justify-center p-8">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col h-full gap-4">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">Language: {language.toUpperCase()}</span>
-        {canRun && (
-          <Button onClick={runCode} disabled={isRunning} size="sm">
-            {isRunning ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4 mr-2" />
-            )}
-            Run Code
-          </Button>
-        )}
+        <span className="text-sm text-muted-foreground">
+          Language: {resolvedLanguage.toUpperCase()}
+        </span>
+        <div className="flex gap-2">
+          {canRun && (
+            <Button onClick={runCode} disabled={isRunning} size="sm">
+              {isRunning ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4 mr-2" />
+              )}
+              Run Code
+            </Button>
+          )}
+        </div>
       </div>
       
       <textarea

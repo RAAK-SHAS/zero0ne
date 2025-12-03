@@ -1,4 +1,4 @@
-import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock } from 'lucide-react';
+import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -33,7 +33,13 @@ interface FileListProps {
   onPreview: (fileId: string) => void;
   onEncrypt: (fileId: string) => void;
   onVersionHistory: (fileId: string) => void;
+  onExtractZip?: (fileId: string) => void;
 }
+
+const isArchiveFile = (fileName: string): boolean => {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  return ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext || '');
+};
 
 export const FileList = ({ 
   files, 
@@ -46,7 +52,8 @@ export const FileList = ({
   onRename,
   onPreview,
   onEncrypt,
-  onVersionHistory
+  onVersionHistory,
+  onExtractZip
 }: FileListProps) => {
   if (files.length === 0) {
     return (
@@ -140,6 +147,12 @@ export const FileList = ({
                   <Lock className="h-4 w-4 mr-2" />
                   {file.is_encrypted ? 'Decrypt' : 'Encrypt'}
                 </DropdownMenuItem>
+                {isArchiveFile(file.name) && onExtractZip && (
+                  <DropdownMenuItem onClick={() => onExtractZip(file.id)}>
+                    <Archive className="h-4 w-4 mr-2" />
+                    Extract Archive
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem 
                   onClick={() => onDelete(file.id)}
                   className="text-destructive"
