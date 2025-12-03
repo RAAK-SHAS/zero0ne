@@ -13,8 +13,10 @@ import { VersionHistory } from '@/components/VersionHistory';
 import { EncryptionDialog } from '@/components/EncryptionDialog';
 import { BatchActions } from '@/components/BatchActions';
 import { SearchFilter } from '@/components/SearchFilter';
+import { ZipHandler } from '@/components/ZipHandler';
 import { toast } from 'sonner';
 import { Upload, Cloud, LogOut, Trash2, ArrowUpDown, Loader2 } from 'lucide-react';
+import JSZip from 'jszip';
 import {
   Select,
   SelectContent,
@@ -33,6 +35,16 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useDropzone } from 'react-dropzone';
+
+// Sanitize filename to remove special characters
+const sanitizeFileName = (name: string): string => {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .substring(0, 200);
+};
 
 interface Profile {
   storage_used_bytes: number;
@@ -113,8 +125,9 @@ const Dashboard = () => {
           continue;
         }
 
-        // Upload file
-        const filePath = `${user?.id}/${Date.now()}-${file.name}`;
+        // Upload file with sanitized name
+        const sanitizedName = sanitizeFileName(file.name);
+        const filePath = `${user?.id}/${Date.now()}-${sanitizedName}`;
         const { error: uploadError } = await supabase.storage
           .from('user-files')
           .upload(filePath, file);
@@ -315,6 +328,84 @@ const Dashboard = () => {
     }
   };
 
+  const handleExtractZip = async (fileId: string) => {
+    const file = files.find(f => f.id === fileId);
+    if (!file) return;
+
+    toast.info('Extracting archive...');
+
+    try {
+      const { data: signedUrl } = await supabase.storage
+        .from('user-files')
+        .createSignedUrl(file.storage_path, 3600);
+
+      if (!signedUrl?.signedUrl) {
+        throw new Error('Failed to get file URL');
+      }
+
+      const response = await fetch(signedUrl.signedUrl);
+      const blob = await response.blob();
+      
+      const zip = await JSZip.loadAsync(blob);
+      const entries = Object.entries(zip.files);
+      let extractedCount = 0;
+      
+      for (const [relativePath, zipEntry] of entries) {
+        if (!zipEntry.dir) {
+          const content = await zipEntry.async('blob');
+          const fileName = relativePath.split('/').pop() || relativePath;
+          const sanitizedName = sanitizeFileName(fileName);
+          const storagePath = `${user?.id}/${Date.now()}-${sanitizedName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('user-files')
+            .upload(storagePath, content);
+
+          if (!uploadError) {
+            await supabase.from('files').insert({
+              user_id: user!.id,
+              name: fileName,
+              size_bytes: content.size,
+              mime_type: getMimeType(fileName),
+              storage_path: storagePath
+            });
+            extractedCount++;
+          }
+        }
+      }
+
+      toast.success(`Extracted ${extractedCount} files!`);
+      loadData();
+    } catch (error) {
+      console.error('Extraction error:', error);
+      toast.error('Failed to extract archive');
+    }
+  };
+
+  // Helper function to get MIME type
+  const getMimeType = (filename: string): string => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      'pdf': 'application/pdf',
+      'txt': 'text/plain',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'mp4': 'video/mp4',
+      'mp3': 'audio/mpeg',
+      'json': 'application/json',
+      'xml': 'application/xml',
+      'html': 'text/html',
+      'css': 'text/css',
+      'js': 'text/javascript',
+      'ts': 'text/typescript',
+      'py': 'text/x-python',
+      'ipynb': 'application/x-ipynb+json',
+    };
+    return mimeTypes[ext || ''] || 'application/octet-stream';
+  };
+
   const filteredAndSortedFiles = files
     .filter(file => 
       file.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -430,10 +521,21 @@ const Dashboard = () => {
               onPreview={handlePreview}
               onEncrypt={(id) => setEncryptFileId(id)}
               onVersionHistory={(id) => setVersionHistoryFileId(id)}
+              onExtractZip={handleExtractZip}
             />
           </div>
         </div>
       </main>
+
+      {selectedFiles.length > 0 && (
+        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-40">
+          <ZipHandler 
+            files={files.filter(f => selectedFiles.includes(f.id))} 
+            userId={user?.id || ''} 
+            onFilesExtracted={loadData}
+          />
+        </div>
+      )}
 
       <BatchActions
         selectedCount={selectedFiles.length}

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Download, X } from 'lucide-react';
 import { CodeEditor } from './CodeEditor';
+import { NotebookViewer } from './NotebookViewer';
 
 interface FilePreviewProps {
   file: {
@@ -28,8 +29,10 @@ export const FilePreview = ({ file, downloadUrl, open, onClose, onDownload }: Fi
     if (mimeType.startsWith('video/')) return 'video';
     if (mimeType.startsWith('audio/')) return 'audio';
     if (mimeType.includes('pdf')) return 'pdf';
-    if (mimeType.includes('text') || ['txt', 'md', 'json', 'xml', 'csv'].includes(ext)) return 'text';
-    if (['js', 'ts', 'tsx', 'jsx', 'py', 'java', 'cpp', 'c', 'html', 'css'].includes(ext)) return 'code';
+    if (ext === 'ipynb') return 'notebook';
+    if (mimeType.includes('text') || ['txt', 'md', 'json', 'xml', 'csv', 'yaml', 'yml', 'log', 'ini', 'conf', 'env'].includes(ext)) return 'text';
+    if (['js', 'ts', 'tsx', 'jsx', 'py', 'java', 'cpp', 'c', 'h', 'hpp', 'cs', 'go', 'rs', 'rb', 'php', 'swift', 'kt', 'scala', 'html', 'css', 'scss', 'sass', 'less', 'sql', 'sh', 'bash', 'zsh', 'ps1', 'r', 'lua', 'perl', 'dart', 'vue', 'svelte'].includes(ext)) return 'code';
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'archive';
     
     return 'unknown';
   };
@@ -52,6 +55,7 @@ export const FilePreview = ({ file, downloadUrl, open, onClose, onDownload }: Fi
               </Button>
             </div>
           </div>
+          <DialogDescription className="sr-only">Preview of {file.name}</DialogDescription>
         </DialogHeader>
         
         <div className="flex-1 overflow-auto">
@@ -91,8 +95,22 @@ export const FilePreview = ({ file, downloadUrl, open, onClose, onDownload }: Fi
             />
           )}
           
+          {fileType === 'notebook' && (
+            <NotebookViewer fileUrl={downloadUrl} />
+          )}
+          
           {fileType === 'text' && (
             <TextPreview url={downloadUrl} />
+          )}
+
+          {fileType === 'archive' && (
+            <div className="flex flex-col items-center justify-center p-12 text-center">
+              <p className="text-muted-foreground mb-4">This is an archive file. Download to extract or use batch actions.</p>
+              <Button onClick={onDownload}>
+                <Download className="h-4 w-4 mr-2" />
+                Download Archive
+              </Button>
+            </div>
           )}
           
           {fileType === 'unknown' && (
@@ -113,15 +131,16 @@ export const FilePreview = ({ file, downloadUrl, open, onClose, onDownload }: Fi
 const TextPreview = ({ url }: { url: string }) => {
   const [content, setContent] = useState<string>('Loading...');
 
+  // Fixed: Use useEffect instead of useState for side effects
   useState(() => {
     fetch(url)
       .then(res => res.text())
-      .then(setContent)
+      .then(text => setContent(text.substring(0, 100000))) // Limit to 100KB for performance
       .catch(() => setContent('Error loading file'));
   });
 
   return (
-    <pre className="p-4 bg-muted rounded-lg overflow-auto max-h-[70vh] text-sm">
+    <pre className="p-4 bg-muted rounded-lg overflow-auto max-h-[70vh] text-sm whitespace-pre-wrap">
       {content}
     </pre>
   );

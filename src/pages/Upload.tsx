@@ -10,6 +10,16 @@ import { Upload as UploadIcon, ArrowLeft, X, FileIcon } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { formatBytes } from '@/lib/utils';
 
+// Sanitize filename to remove special characters
+const sanitizeFileName = (name: string): string => {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .substring(0, 200);
+};
+
 const Upload = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -56,7 +66,8 @@ const Upload = () => {
       // Upload each file
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i];
-        const fileName = `${user.id}/${Date.now()}-${file.name}`;
+        const sanitizedName = sanitizeFileName(file.name);
+        const fileName = `${user.id}/${Date.now()}-${sanitizedName}`;
 
         const { error: uploadError } = await supabase.storage
           .from('user-files')
