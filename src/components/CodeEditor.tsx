@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Play, Loader2, Save } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import Editor from '@monaco-editor/react';
 
 interface CodeEditorProps {
   fileUrl: string;
@@ -10,7 +11,7 @@ interface CodeEditorProps {
   language: string;
 }
 
-const getLanguageFromExtension = (ext: string): string => {
+const getMonacoLanguage = (ext: string): string => {
   const languageMap: Record<string, string> = {
     'js': 'javascript',
     'jsx': 'javascript',
@@ -33,32 +34,46 @@ const getLanguageFromExtension = (ext: string): string => {
     'html': 'html',
     'css': 'css',
     'scss': 'scss',
-    'sass': 'sass',
+    'sass': 'scss',
     'less': 'less',
     'sql': 'sql',
-    'sh': 'bash',
-    'bash': 'bash',
-    'zsh': 'bash',
+    'sh': 'shell',
+    'bash': 'shell',
+    'zsh': 'shell',
     'ps1': 'powershell',
     'r': 'r',
     'lua': 'lua',
     'perl': 'perl',
     'dart': 'dart',
-    'vue': 'vue',
-    'svelte': 'svelte',
+    'vue': 'html',
+    'svelte': 'html',
     'json': 'json',
     'xml': 'xml',
     'yaml': 'yaml',
     'yml': 'yaml',
     'md': 'markdown',
     'markdown': 'markdown',
-    'txt': 'text',
+    'txt': 'plaintext',
     'ini': 'ini',
-    'conf': 'conf',
-    'env': 'env',
-    'log': 'log',
+    'conf': 'ini',
+    'env': 'plaintext',
+    'log': 'plaintext',
   };
-  return languageMap[ext.toLowerCase()] || ext;
+  return languageMap[ext.toLowerCase()] || 'plaintext';
+};
+
+const getExecutableLanguage = (ext: string): string => {
+  const execMap: Record<string, string> = {
+    'js': 'javascript',
+    'jsx': 'javascript',
+    'ts': 'typescript',
+    'tsx': 'typescript',
+    'py': 'python',
+    'java': 'java',
+    'cpp': 'cpp',
+    'c': 'c',
+  };
+  return execMap[ext.toLowerCase()] || ext;
 };
 
 export const CodeEditor = ({ fileUrl, fileName, language }: CodeEditorProps) => {
@@ -67,7 +82,8 @@ export const CodeEditor = ({ fileUrl, fileName, language }: CodeEditorProps) => 
   const [isRunning, setIsRunning] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const resolvedLanguage = getLanguageFromExtension(language);
+  const monacoLanguage = getMonacoLanguage(language);
+  const execLanguage = getExecutableLanguage(language);
 
   useEffect(() => {
     fetch(fileUrl)
@@ -88,7 +104,7 @@ export const CodeEditor = ({ fileUrl, fileName, language }: CodeEditorProps) => 
 
     try {
       const { data, error } = await supabase.functions.invoke('run-code', {
-        body: { code, language: resolvedLanguage }
+        body: { code, language: execLanguage }
       });
 
       if (error) throw error;
@@ -100,7 +116,7 @@ export const CodeEditor = ({ fileUrl, fileName, language }: CodeEditorProps) => 
     }
   };
 
-  const canRun = ['python', 'javascript', 'typescript', 'js', 'ts', 'py', 'java', 'cpp', 'c'].includes(resolvedLanguage);
+  const canRun = ['python', 'javascript', 'typescript', 'js', 'ts', 'py', 'java', 'cpp', 'c'].includes(execLanguage);
 
   if (loading) {
     return (
@@ -114,7 +130,7 @@ export const CodeEditor = ({ fileUrl, fileName, language }: CodeEditorProps) => 
     <div className="flex flex-col h-full gap-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
-          Language: {resolvedLanguage.toUpperCase()}
+          Language: {monacoLanguage.toUpperCase()}
         </span>
         <div className="flex gap-2">
           {canRun && (
@@ -130,12 +146,30 @@ export const CodeEditor = ({ fileUrl, fileName, language }: CodeEditorProps) => 
         </div>
       </div>
       
-      <textarea
-        value={code}
-        onChange={(e) => setCode(e.target.value)}
-        className="flex-1 min-h-[300px] p-4 bg-muted rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-        spellCheck={false}
-      />
+      <div className="flex-1 min-h-[300px] border rounded-lg overflow-hidden">
+        <Editor
+          height="100%"
+          language={monacoLanguage}
+          value={code}
+          onChange={(value) => setCode(value || '')}
+          theme="vs-dark"
+          options={{
+            minimap: { enabled: true },
+            fontSize: 14,
+            lineNumbers: 'on',
+            roundedSelection: true,
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            tabSize: 2,
+            wordWrap: 'on',
+            suggestOnTriggerCharacters: true,
+            quickSuggestions: true,
+            folding: true,
+            foldingHighlight: true,
+            bracketPairColorization: { enabled: true },
+          }}
+        />
+      </div>
       
       {canRun && output && (
         <div className="border-t pt-4">
