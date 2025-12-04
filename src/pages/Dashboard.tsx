@@ -14,6 +14,7 @@ import { EncryptionDialog } from '@/components/EncryptionDialog';
 import { BatchActions } from '@/components/BatchActions';
 import { SearchFilter } from '@/components/SearchFilter';
 import { ZipHandler } from '@/components/ZipHandler';
+import { useChunkedUpload } from '@/hooks/useChunkedUpload';
 import { toast } from 'sonner';
 import { Upload, Cloud, LogOut, Trash2, ArrowUpDown, Loader2 } from 'lucide-react';
 import JSZip from 'jszip';
@@ -35,16 +36,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useDropzone } from 'react-dropzone';
-
-// Sanitize filename to remove special characters
-const sanitizeFileName = (name: string): string => {
-  return name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9._-]/g, '_')
-    .replace(/_+/g, '_')
-    .substring(0, 200);
-};
+import { Progress } from '@/components/ui/progress';
 
 interface Profile {
   storage_used_bytes: number;
@@ -80,7 +72,9 @@ const Dashboard = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [versionHistoryFileId, setVersionHistoryFileId] = useState<string | null>(null);
   const [encryptFileId, setEncryptFileId] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  
+  const { uploadFiles, isUploading, uploadProgress: fileProgress, sanitizeFileName } = useChunkedUpload();
 
   useEffect(() => {
     loadData();
@@ -108,53 +102,37 @@ const Dashboard = () => {
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
+    if (acceptedFiles.length === 0 || !user) return;
     
-    setUploading(true);
-
-    for (const file of acceptedFiles) {
-      try {
-        // Check storage quota
-        const { data: currentProfile } = await supabase
-          .from('profiles')
-          .select('storage_used_bytes, storage_quota_bytes')
-          .single();
-
-        if (currentProfile && currentProfile.storage_used_bytes + file.size > currentProfile.storage_quota_bytes) {
-          toast.error(`Not enough storage space for ${file.name}`);
-          continue;
+    let successCount = 0;
+    
+    await uploadFiles(
+      acceptedFiles, 
+      user.id,
+      async (file, result) => {
+        if (result.success && result.path) {
+          // Create database record
+          const { error: dbError } = await supabase
+            .from('files')
+            .insert({
+              name: file.name,
+              size_bytes: file.size,
+              mime_type: file.type,
+              storage_path: result.path,
+              user_id: user.id
+            });
+          
+          if (!dbError) successCount++;
         }
-
-        // Upload file with sanitized name
-        const sanitizedName = sanitizeFileName(file.name);
-        const filePath = `${user?.id}/${Date.now()}-${sanitizedName}`;
-        const { error: uploadError } = await supabase.storage
-          .from('user-files')
-          .upload(filePath, file);
-
-        if (uploadError) throw uploadError;
-
-        // Create database record
-        const { error: dbError } = await supabase
-          .from('files')
-          .insert({
-            name: file.name,
-            size_bytes: file.size,
-            mime_type: file.type,
-            storage_path: filePath,
-            user_id: user!.id
-          });
-
-        if (dbError) throw dbError;
-      } catch (error) {
-        toast.error(`Failed to upload ${file.name}`);
+      },
+      () => {
+        if (successCount > 0) {
+          toast.success(`${successCount} file(s) uploaded successfully`);
+        }
+        loadData();
       }
-    }
-
-    setUploading(false);
-    await loadData();
-    toast.success(`${acceptedFiles.length} file(s) uploaded successfully`);
-  }, [user]);
+    );
+  }, [user, uploadFiles]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
@@ -449,11 +427,22 @@ const Dashboard = () => {
         </div>
       )}
 
-      {uploading && (
+      {isUploading && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-card p-8 rounded-lg shadow-lg">
+          <div className="bg-card p-8 rounded-lg shadow-lg min-w-[300px]">
             <Loader2 className="h-12 w-12 mx-auto mb-4 text-primary animate-spin" />
-            <p className="text-lg font-medium">Uploading files...</p>
+            <p className="text-lg font-medium text-center mb-4">Uploading files...</p>
+            <div className="space-y-2">
+              {Object.values(fileProgress).map((fp) => (
+                <div key={fp.fileName} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="truncate max-w-[200px]">{fp.fileName}</span>
+                    <span>{fp.progress}%</span>
+                  </div>
+                  <Progress value={fp.progress} className="h-2" />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
