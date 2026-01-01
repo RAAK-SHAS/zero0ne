@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUploadManager } from '@/contexts/UploadContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { StorageBar } from '@/components/StorageBar';
@@ -14,9 +15,9 @@ import { EncryptionDialog } from '@/components/EncryptionDialog';
 import { BatchActions } from '@/components/BatchActions';
 import { SearchFilter } from '@/components/SearchFilter';
 import { ZipHandler } from '@/components/ZipHandler';
-import { useChunkedUpload } from '@/hooks/useChunkedUpload';
+import { GlobalUploadIndicator } from '@/components/GlobalUploadIndicator';
 import { toast } from 'sonner';
-import { Upload, Cloud, LogOut, Trash2, ArrowUpDown, Loader2 } from 'lucide-react';
+import { Upload, Cloud, LogOut, Trash2, ArrowUpDown, Loader2, FolderUp } from 'lucide-react';
 import JSZip from 'jszip';
 import {
   Select,
@@ -72,9 +73,8 @@ const Dashboard = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [versionHistoryFileId, setVersionHistoryFileId] = useState<string | null>(null);
   const [encryptFileId, setEncryptFileId] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
   
-  const { uploadFiles, isUploading, uploadProgress: fileProgress, sanitizeFileName } = useChunkedUpload();
+  const { addFiles, isUploading, uploads } = useUploadManager();
 
   useEffect(() => {
     loadData();
@@ -103,36 +103,9 @@ const Dashboard = () => {
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0 || !user) return;
-    
-    let successCount = 0;
-    
-    await uploadFiles(
-      acceptedFiles, 
-      user.id,
-      async (file, result) => {
-        if (result.success && result.path) {
-          // Create database record
-          const { error: dbError } = await supabase
-            .from('files')
-            .insert({
-              name: file.name,
-              size_bytes: file.size,
-              mime_type: file.type,
-              storage_path: result.path,
-              user_id: user.id
-            });
-          
-          if (!dbError) successCount++;
-        }
-      },
-      () => {
-        if (successCount > 0) {
-          toast.success(`${successCount} file(s) uploaded successfully`);
-        }
-        loadData();
-      }
-    );
-  }, [user, uploadFiles]);
+    addFiles(acceptedFiles, user.id);
+    toast.info(`Added ${acceptedFiles.length} file(s) to upload queue`);
+  }, [user, addFiles]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
@@ -332,7 +305,7 @@ const Dashboard = () => {
         if (!zipEntry.dir) {
           const content = await zipEntry.async('blob');
           const fileName = relativePath.split('/').pop() || relativePath;
-          const sanitizedName = sanitizeFileName(fileName);
+          const sanitizedName = fileName.replace(/[^\w\s.-]/g, '_').replace(/\s+/g, '_').slice(0, 100);
           const storagePath = `${user?.id}/${Date.now()}-${sanitizedName}`;
 
           const { error: uploadError } = await supabase.storage
@@ -427,25 +400,7 @@ const Dashboard = () => {
         </div>
       )}
 
-      {isUploading && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-card p-8 rounded-lg shadow-lg min-w-[300px]">
-            <Loader2 className="h-12 w-12 mx-auto mb-4 text-primary animate-spin" />
-            <p className="text-lg font-medium text-center mb-4">Uploading files...</p>
-            <div className="space-y-2">
-              {Object.values(fileProgress).map((fp) => (
-                <div key={fp.fileName} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="truncate max-w-[200px]">{fp.fileName}</span>
-                    <span>{fp.progress}%</span>
-                  </div>
-                  <Progress value={fp.progress} className="h-2" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Upload progress is now shown in GlobalUploadIndicator */}
 
       <header className="border-b bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -454,6 +409,7 @@ const Dashboard = () => {
             <h1 className="text-xl font-bold">CloudStore</h1>
           </div>
           <div className="flex items-center gap-2">
+            <GlobalUploadIndicator />
             <Button variant="ghost" size="sm" onClick={() => navigate('/trash')}>
               <Trash2 className="h-4 w-4 mr-2" />
               Trash
