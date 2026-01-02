@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -53,6 +53,7 @@ export const useUploadManager = () => {
 
 export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const [uploads, setUploads] = useState<Record<string, UploadItem>>({});
+  const uploadsRef = useRef<Record<string, UploadItem>>({});
   const [isUploading, setIsUploading] = useState(false);
   const abortControllers = useRef<Record<string, AbortController>>({});
   const pausedUploads = useRef<Set<string>>(new Set());
@@ -60,6 +61,10 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const fileRefs = useRef<Record<string, File>>({});
   const uploadQueue = useRef<string[]>([]);
   const currentUserId = useRef<string>('');
+
+  useEffect(() => {
+    uploadsRef.current = uploads;
+  }, [uploads]);
 
   const openDB = useCallback((): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
@@ -212,8 +217,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const uploadId = uploadQueue.current[0];
-    const upload = uploads[uploadId];
-    
+    const upload = uploadsRef.current[uploadId];
     if (!upload || !fileRefs.current[uploadId]) {
       uploadQueue.current.shift();
       processNextInQueue();
@@ -361,11 +365,14 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       newQueueItems.push(uploadId);
     });
 
+    // Update the ref immediately so queue processing can see the new items
+    uploadsRef.current = { ...uploadsRef.current, ...newUploads };
     setUploads(prev => ({ ...prev, ...newUploads }));
     uploadQueue.current.push(...newQueueItems);
 
     if (!isUploading) {
-      processNextInQueue();
+      // Start on next tick to avoid racing React state updates
+      setTimeout(() => processNextInQueue(), 0);
     }
   }, [uploads, isUploading, processNextInQueue]);
 
@@ -374,6 +381,10 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     if (abortControllers.current[id]) {
       abortControllers.current[id].abort();
     }
+
+    const next = { ...uploadsRef.current[id], status: 'paused' as const };
+    uploadsRef.current = { ...uploadsRef.current, [id]: next };
+
     setUploads(prev => ({
       ...prev,
       [id]: { ...prev[id], status: 'paused' }
@@ -384,16 +395,19 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const resumeUpload = useCallback((id: string, file: File) => {
     pausedUploads.current.delete(id);
     fileRefs.current[id] = file;
-    
+
+    const next = { ...uploadsRef.current[id], status: 'queued' as const, file };
+    uploadsRef.current = { ...uploadsRef.current, [id]: next };
+
     setUploads(prev => ({
       ...prev,
       [id]: { ...prev[id], status: 'queued', file }
     }));
-    
+
     uploadQueue.current.push(id);
-    
+
     if (!isUploading) {
-      processNextInQueue();
+      setTimeout(() => processNextInQueue(), 0);
     }
   }, [isUploading, processNextInQueue]);
 
