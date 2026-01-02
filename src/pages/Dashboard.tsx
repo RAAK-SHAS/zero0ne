@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUploadManager } from '@/contexts/UploadContext';
+import { useDownloadManager } from '@/contexts/DownloadContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { StorageBar } from '@/components/StorageBar';
@@ -16,8 +17,11 @@ import { BatchActions } from '@/components/BatchActions';
 import { SearchFilter } from '@/components/SearchFilter';
 import { ZipHandler } from '@/components/ZipHandler';
 import { GlobalUploadIndicator } from '@/components/GlobalUploadIndicator';
+import { DownloadManager } from '@/components/DownloadManager';
+import { UploadQueuePanel } from '@/components/UploadQueuePanel';
+import { ResumeUploadDialog } from '@/components/ResumeUploadDialog';
 import { toast } from 'sonner';
-import { Upload, Cloud, LogOut, Trash2, ArrowUpDown, Loader2, FolderUp } from 'lucide-react';
+import { Upload, Cloud, LogOut, Trash2, ArrowUpDown, ListOrdered } from 'lucide-react';
 import JSZip from 'jszip';
 import {
   Select,
@@ -73,11 +77,53 @@ const Dashboard = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [versionHistoryFileId, setVersionHistoryFileId] = useState<string | null>(null);
   const [encryptFileId, setEncryptFileId] = useState<string | null>(null);
+  const [showUploadQueue, setShowUploadQueue] = useState(false);
+  const [resumeUploadId, setResumeUploadId] = useState<string | null>(null);
+  const [resumeFileName, setResumeFileName] = useState('');
   
-  const { addFiles, isUploading, uploads } = useUploadManager();
+  const { addFiles, isUploading, uploads, resumeUpload, cancelUpload, getPausedUploadsNeedingFile } = useUploadManager();
+  const { downloadFile, downloadMultipleAsZip } = useDownloadManager();
 
   useEffect(() => {
     loadData();
+  }, [user]);
+
+  // Realtime subscription for file updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('files-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'files',
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newFile = payload.new as FileItem;
+            if (newFile.user_id === user.id && !newFile.deleted_at) {
+              setFiles(prev => [newFile, ...prev.filter(f => f.id !== newFile.id)]);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as FileItem;
+            if (updated.deleted_at) {
+              setFiles(prev => prev.filter(f => f.id !== updated.id));
+            } else {
+              setFiles(prev => prev.map(f => f.id === updated.id ? updated : f));
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setFiles(prev => prev.filter(f => f.id !== (payload.old as FileItem).id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const loadData = async () => {
@@ -99,6 +145,17 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleReselectFile = (uploadId: string, fileName: string) => {
+    setResumeUploadId(uploadId);
+    setResumeFileName(fileName);
+  };
+
+  const handleFileReselected = (uploadId: string, file: File) => {
+    resumeUpload(uploadId, file);
+    setResumeUploadId(null);
+    toast.success('Upload resumed!');
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {

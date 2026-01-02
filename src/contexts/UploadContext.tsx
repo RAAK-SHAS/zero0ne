@@ -27,6 +27,20 @@ export interface UploadItem {
   file?: File;
 }
 
+export interface UploadDiagnostics {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  storagePath: string;
+  totalChunks: number;
+  uploadedChunks: number[];
+  lastUploadedChunk: number | null;
+  failedAt: string | null;
+  error: string | null;
+  createdAt: number;
+  status: string;
+}
+
 interface UploadContextType {
   uploads: Record<string, UploadItem>;
   isUploading: boolean;
@@ -39,6 +53,12 @@ interface UploadContextType {
   getActiveCount: () => number;
   getPendingCount: () => number;
   getTotalProgress: () => number;
+  pauseAll: () => void;
+  resumeAll: () => void;
+  moveToFront: (id: string) => void;
+  getUploadDiagnostics: (id: string) => UploadDiagnostics | null;
+  retryUpload: (id: string) => void;
+  getPausedUploadsNeedingFile: () => UploadItem[];
 }
 
 const UploadContext = createContext<UploadContextType | null>(null);
@@ -489,6 +509,95 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     return activeUploads.reduce((sum, u) => sum + u.progress, 0) / activeUploads.length;
   }, [uploads]);
 
+  const pauseAll = useCallback(() => {
+    Object.keys(uploads).forEach(id => {
+      if (uploads[id].status === 'uploading' || uploads[id].status === 'queued') {
+        pauseUpload(id);
+      }
+    });
+  }, [uploads, pauseUpload]);
+
+  const resumeAll = useCallback(() => {
+    Object.values(uploads).forEach(upload => {
+      if (upload.status === 'paused' && upload.file) {
+        resumeUpload(upload.id, upload.file);
+      }
+    });
+  }, [uploads, resumeUpload]);
+
+  const moveToFront = useCallback((id: string) => {
+    const queueIndex = uploadQueue.current.indexOf(id);
+    if (queueIndex <= 1) return; // Already first or currently uploading
+    
+    // Move to position 1 (after currently uploading)
+    uploadQueue.current.splice(queueIndex, 1);
+    uploadQueue.current.splice(1, 0, id);
+    
+    // Update priorities
+    setUploads(prev => {
+      const newUploads = { ...prev };
+      uploadQueue.current.forEach((uploadId, index) => {
+        if (newUploads[uploadId]) {
+          newUploads[uploadId] = { ...newUploads[uploadId], priority: index };
+        }
+      });
+      return newUploads;
+    });
+    
+    toast.info('Moved to front of queue');
+  }, []);
+
+  const getUploadDiagnostics = useCallback((id: string): UploadDiagnostics | null => {
+    const upload = uploads[id];
+    if (!upload) return null;
+    
+    return {
+      id: upload.id,
+      fileName: upload.fileName,
+      fileSize: upload.fileSize,
+      storagePath: upload.storagePath,
+      totalChunks: upload.totalChunks,
+      uploadedChunks: upload.uploadedChunks,
+      lastUploadedChunk: upload.uploadedChunks.length > 0 
+        ? upload.uploadedChunks[upload.uploadedChunks.length - 1] 
+        : null,
+      failedAt: upload.status === 'error' ? new Date().toISOString() : null,
+      error: upload.error || null,
+      createdAt: upload.createdAt,
+      status: upload.status,
+    };
+  }, [uploads]);
+
+  const retryUpload = useCallback((id: string) => {
+    const upload = uploads[id];
+    if (!upload || !upload.file) {
+      toast.error('Please reselect the file to retry');
+      return;
+    }
+    
+    pausedUploads.current.delete(id);
+    
+    const next = { ...upload, status: 'queued' as const, error: undefined };
+    uploadsRef.current = { ...uploadsRef.current, [id]: next };
+    
+    setUploads(prev => ({
+      ...prev,
+      [id]: next
+    }));
+    
+    uploadQueue.current.push(id);
+    
+    if (!isUploading) {
+      setTimeout(() => processNextInQueue(), 0);
+    }
+    
+    toast.info('Retrying upload...');
+  }, [uploads, isUploading, processNextInQueue]);
+
+  const getPausedUploadsNeedingFile = useCallback(() => {
+    return Object.values(uploads).filter(u => u.status === 'paused' && !u.file);
+  }, [uploads]);
+
   return (
     <UploadContext.Provider value={{
       uploads,
@@ -502,6 +611,12 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       getActiveCount,
       getPendingCount,
       getTotalProgress,
+      pauseAll,
+      resumeAll,
+      moveToFront,
+      getUploadDiagnostics,
+      retryUpload,
+      getPausedUploadsNeedingFile,
     }}>
       {children}
     </UploadContext.Provider>
