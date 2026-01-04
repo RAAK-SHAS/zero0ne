@@ -59,6 +59,8 @@ interface UploadContextType {
   getUploadDiagnostics: (id: string) => UploadDiagnostics | null;
   retryUpload: (id: string) => void;
   getPausedUploadsNeedingFile: () => UploadItem[];
+  throttleRate: number; // bytes per second, 0 = unlimited
+  setThrottleRate: (rate: number) => void;
 }
 
 const UploadContext = createContext<UploadContextType | null>(null);
@@ -75,16 +77,21 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const [uploads, setUploads] = useState<Record<string, UploadItem>>({});
   const uploadsRef = useRef<Record<string, UploadItem>>({});
   const [isUploading, setIsUploading] = useState(false);
+  const [throttleRate, setThrottleRate] = useState(0); // 0 = unlimited
+  const throttleRateRef = useRef(0);
   const abortControllers = useRef<Record<string, AbortController>>({});
   const pausedUploads = useRef<Set<string>>(new Set());
   const speedTracking = useRef<Record<string, { bytes: number; timestamp: number }[]>>({});
   const fileRefs = useRef<Record<string, File>>({});
   const uploadQueue = useRef<string[]>([]);
   const currentUserId = useRef<string>('');
-
   useEffect(() => {
     uploadsRef.current = uploads;
   }, [uploads]);
+
+  useEffect(() => {
+    throttleRateRef.current = throttleRate;
+  }, [throttleRate]);
 
   const openDB = useCallback((): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
@@ -291,7 +298,20 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           const chunk = file.slice(start, end);
           const chunkPath = `${state.storagePath}.chunk_${i}`;
 
-          await uploadChunkWithRetry(chunk, chunkPath, signal);
+          // Apply throttling delay if set
+          const currentThrottle = throttleRateRef.current;
+          if (currentThrottle > 0) {
+            const chunkSize = end - start;
+            const expectedTime = (chunkSize / currentThrottle) * 1000; // ms
+            const startTime = Date.now();
+            await uploadChunkWithRetry(chunk, chunkPath, signal);
+            const elapsed = Date.now() - startTime;
+            if (elapsed < expectedTime) {
+              await new Promise(r => setTimeout(r, expectedTime - elapsed));
+            }
+          } else {
+            await uploadChunkWithRetry(chunk, chunkPath, signal);
+          }
 
           state.uploadedChunks.push(i);
           state.bytesUploaded = Math.min(state.uploadedChunks.length * CHUNK_SIZE, file.size);
@@ -617,6 +637,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       getUploadDiagnostics,
       retryUpload,
       getPausedUploadsNeedingFile,
+      throttleRate,
+      setThrottleRate,
     }}>
       {children}
     </UploadContext.Provider>
