@@ -56,6 +56,8 @@ interface FileItem {
   storage_path: string;
   created_at: string;
   is_encrypted?: boolean;
+  user_id: string;
+  deleted_at: string | null;
 }
 
 const Dashboard = () => {
