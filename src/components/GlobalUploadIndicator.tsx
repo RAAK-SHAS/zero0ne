@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,7 +7,8 @@ import {
   Pause, 
   Zap, 
   ChevronDown,
-  X 
+  X,
+  Gauge
 } from 'lucide-react';
 import { formatBytes } from '@/lib/utils';
 import { useUploadManager } from '@/contexts/UploadContext';
@@ -16,6 +18,14 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Slider } from '@/components/ui/slider';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const formatTime = (seconds: number): string => {
   if (!seconds || seconds === Infinity || isNaN(seconds)) return '--:--';
@@ -34,6 +44,18 @@ const formatSpeed = (bytesPerSecond: number): string => {
   return `${formatBytes(bytesPerSecond)}/s`;
 };
 
+// Throttle presets in bytes per second
+const THROTTLE_PRESETS = [
+  { label: 'Unlimited', value: 0 },
+  { label: '10 MB/s', value: 10 * 1024 * 1024 },
+  { label: '5 MB/s', value: 5 * 1024 * 1024 },
+  { label: '2 MB/s', value: 2 * 1024 * 1024 },
+  { label: '1 MB/s', value: 1 * 1024 * 1024 },
+  { label: '500 KB/s', value: 500 * 1024 },
+  { label: '256 KB/s', value: 256 * 1024 },
+  { label: '128 KB/s', value: 128 * 1024 },
+];
+
 export const GlobalUploadIndicator = () => {
   const { 
     uploads, 
@@ -43,7 +65,9 @@ export const GlobalUploadIndicator = () => {
     clearCompleted,
     getActiveCount,
     getPendingCount,
-    getTotalProgress 
+    getTotalProgress,
+    throttleRate,
+    setThrottleRate
   } = useUploadManager();
 
   const uploadList = Object.values(uploads);
@@ -55,6 +79,11 @@ export const GlobalUploadIndicator = () => {
   const totalSpeed = activeUploads.reduce((sum, u) => sum + u.speed, 0);
   const completedCount = uploadList.filter(u => u.status === 'completed').length;
   const pausedCount = uploadList.filter(u => u.status === 'paused').length;
+
+  const getThrottleLabel = (value: number) => {
+    const preset = THROTTLE_PRESETS.find(p => p.value === value);
+    return preset?.label || formatSpeed(value);
+  };
 
   if (uploadList.length === 0) return null;
 
@@ -107,6 +136,34 @@ export const GlobalUploadIndicator = () => {
           {pendingCount > 0 && (
             <Progress value={progress} className="h-1.5 mt-2" />
           )}
+          
+          {/* Throttle Control */}
+          <div className="mt-3 pt-3 border-t">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Gauge className="h-3 w-3" />
+                Speed Limit
+              </span>
+              <span className="text-xs font-medium">
+                {getThrottleLabel(throttleRate)}
+              </span>
+            </div>
+            <Select
+              value={String(throttleRate)}
+              onValueChange={(val) => setThrottleRate(Number(val))}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select speed limit" />
+              </SelectTrigger>
+              <SelectContent>
+                {THROTTLE_PRESETS.map((preset) => (
+                  <SelectItem key={preset.value} value={String(preset.value)}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         
         <ScrollArea className="max-h-64">
