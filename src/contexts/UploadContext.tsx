@@ -333,18 +333,29 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      // Create database record
-      const { error: dbError } = await supabase
+      // Create database record - check if already exists first
+      const fileName = state.folderPath ? `${state.folderPath}/${state.fileName}` : state.fileName;
+      
+      // Check if a record with this storage_path already exists
+      const { data: existingFile } = await supabase
         .from('files')
-        .insert({
-          user_id: currentUserId.current,
-          name: state.folderPath ? `${state.folderPath}/${state.fileName}` : state.fileName,
-          size_bytes: file.size,
-          mime_type: state.fileType,
-          storage_path: state.storagePath
-        });
+        .select('id')
+        .eq('storage_path', state.storagePath)
+        .maybeSingle();
+      
+      if (!existingFile) {
+        const { error: dbError } = await supabase
+          .from('files')
+          .insert({
+            user_id: currentUserId.current,
+            name: fileName,
+            size_bytes: file.size,
+            mime_type: state.fileType,
+            storage_path: state.storagePath
+          });
 
-      if (dbError) throw dbError;
+        if (dbError) throw dbError;
+      }
 
       setUploads(prev => ({ ...prev, [uploadId]: state }));
       await deleteUploadState(uploadId);
