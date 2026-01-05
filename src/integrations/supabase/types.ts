@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_logs: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string | null
+          entity_name: string | null
+          entity_type: string
+          id: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       file_versions: {
         Row: {
           created_at: string
@@ -58,12 +99,15 @@ export type Database = {
           deleted_at: string | null
           encryption_algorithm: string | null
           encryption_metadata: Json | null
+          folder_id: string | null
           id: string
           is_encrypted: boolean | null
+          is_favorite: boolean | null
           mime_type: string | null
           name: string
           size_bytes: number
           storage_path: string
+          tags: string[] | null
           user_id: string
         }
         Insert: {
@@ -71,12 +115,15 @@ export type Database = {
           deleted_at?: string | null
           encryption_algorithm?: string | null
           encryption_metadata?: Json | null
+          folder_id?: string | null
           id?: string
           is_encrypted?: boolean | null
+          is_favorite?: boolean | null
           mime_type?: string | null
           name: string
           size_bytes: number
           storage_path: string
+          tags?: string[] | null
           user_id: string
         }
         Update: {
@@ -84,17 +131,69 @@ export type Database = {
           deleted_at?: string | null
           encryption_algorithm?: string | null
           encryption_metadata?: Json | null
+          folder_id?: string | null
           id?: string
           is_encrypted?: boolean | null
+          is_favorite?: boolean | null
           mime_type?: string | null
           name?: string
           size_bytes?: number
           storage_path?: string
+          tags?: string[] | null
           user_id?: string
         }
         Relationships: [
           {
+            foreignKeyName: "files_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "files_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      folders: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          parent_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          parent_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          parent_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folders_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
