@@ -1,11 +1,11 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import * as tus from 'tus-js-client';
 
-const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks
-const MAX_RETRIES = 3;
 const DB_NAME = 'CloudStoreUploads';
 const STORE_NAME = 'uploads';
+const TUS_CHUNK_SIZE = 6 * 1024 * 1024; // 6MB chunks for TUS
 
 export interface UploadItem {
   id: string;
@@ -25,6 +25,7 @@ export interface UploadItem {
   priority: number;
   folderPath?: string;
   file?: File;
+  tusUploadUrl?: string;
 }
 
 export interface UploadDiagnostics {
@@ -44,7 +45,7 @@ export interface UploadDiagnostics {
 interface UploadContextType {
   uploads: Record<string, UploadItem>;
   isUploading: boolean;
-  addFiles: (files: File[], userId: string, folderPath?: string) => void;
+  addFiles: (files: File[], userId: string, folderPath?: string, folderId?: string) => void;
   pauseUpload: (id: string) => void;
   resumeUpload: (id: string, file: File) => void;
   cancelUpload: (id: string) => void;
@@ -59,7 +60,7 @@ interface UploadContextType {
   getUploadDiagnostics: (id: string) => UploadDiagnostics | null;
   retryUpload: (id: string) => void;
   getPausedUploadsNeedingFile: () => UploadItem[];
-  throttleRate: number; // bytes per second, 0 = unlimited
+  throttleRate: number;
   setThrottleRate: (rate: number) => void;
 }
 
@@ -77,14 +78,16 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const [uploads, setUploads] = useState<Record<string, UploadItem>>({});
   const uploadsRef = useRef<Record<string, UploadItem>>({});
   const [isUploading, setIsUploading] = useState(false);
-  const [throttleRate, setThrottleRate] = useState(0); // 0 = unlimited
+  const [throttleRate, setThrottleRate] = useState(0);
   const throttleRateRef = useRef(0);
-  const abortControllers = useRef<Record<string, AbortController>>({});
+  const tusUploads = useRef<Record<string, tus.Upload>>({});
   const pausedUploads = useRef<Set<string>>(new Set());
   const speedTracking = useRef<Record<string, { bytes: number; timestamp: number }[]>>({});
   const fileRefs = useRef<Record<string, File>>({});
   const uploadQueue = useRef<string[]>([]);
   const currentUserId = useRef<string>('');
+  const processingRef = useRef(false);
+
   useEffect(() => {
     uploadsRef.current = uploads;
   }, [uploads]);
@@ -172,72 +175,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     return timeDiff > 0 ? bytesDiff / timeDiff : 0;
   };
 
-  const uploadChunkWithRetry = async (
-    chunk: Blob,
-    path: string,
-    signal: AbortSignal,
-    retries = 0
-  ): Promise<boolean> => {
-    try {
-      const { error } = await supabase.storage
-        .from('user-files')
-        .upload(path, chunk, {
-          cacheControl: '3600',
-          upsert: true,
-        });
-
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      if (retries < MAX_RETRIES && !signal.aborted) {
-        await new Promise(r => setTimeout(r, 1000 * (retries + 1)));
-        return uploadChunkWithRetry(chunk, path, signal, retries + 1);
-      }
-      throw error;
-    }
-  };
-
-  const combineChunks = async (
-    storagePath: string,
-    totalChunks: number,
-    fileType: string
-  ): Promise<boolean> => {
-    try {
-      const chunks: Blob[] = [];
-      
-      for (let i = 0; i < totalChunks; i++) {
-        const chunkPath = `${storagePath}.chunk_${i}`;
-        const { data, error } = await supabase.storage
-          .from('user-files')
-          .download(chunkPath);
-        
-        if (error) throw error;
-        chunks.push(data);
-      }
-      
-      const combinedBlob = new Blob(chunks, { type: fileType });
-      
-      const { error: uploadError } = await supabase.storage
-        .from('user-files')
-        .upload(storagePath, combinedBlob, {
-          cacheControl: '3600',
-          upsert: true,
-        });
-      
-      if (uploadError) throw uploadError;
-      
-      // Clean up chunks
-      const chunkPaths = Array.from({ length: totalChunks }, (_, i) => `${storagePath}.chunk_${i}`);
-      await supabase.storage.from('user-files').remove(chunkPaths);
-      
-      return true;
-    } catch (error) {
-      console.error('Failed to combine chunks:', error);
-      throw error;
-    }
-  };
-
   const processNextInQueue = useCallback(async () => {
+    if (processingRef.current) return;
     if (uploadQueue.current.length === 0) {
       setIsUploading(false);
       return;
@@ -252,116 +191,116 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const file = fileRefs.current[uploadId];
+    processingRef.current = true;
     setIsUploading(true);
-
-    abortControllers.current[uploadId] = new AbortController();
-    const signal = abortControllers.current[uploadId].signal;
-    pausedUploads.current.delete(uploadId);
 
     let state: UploadItem = { ...upload, status: 'uploading' };
     setUploads(prev => ({ ...prev, [uploadId]: state }));
     await saveUploadState(state);
 
     try {
-      const useChunked = file.size > 50 * 1024 * 1024;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
+      if (!accessToken) {
+        throw new Error('Not authenticated');
+      }
 
-      if (!useChunked) {
-        // Direct upload
-        const { error } = await supabase.storage
-          .from('user-files')
-          .upload(state.storagePath, file, {
-            cacheControl: '3600',
-            upsert: false,
-          });
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'ttrbjdpiccvfaccwpodu';
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0cmJqZHBpY2N2ZmFjY3dwb2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1ODY0MzMsImV4cCI6MjA4MDE2MjQzM30.FvgQ19ihD7nd4Ty4QSrbnYoUwm2RNGnLf032-j_yG4M';
 
-        if (error) throw error;
-
-        state.progress = 100;
-        state.status = 'completed';
-        state.bytesUploaded = file.size;
-      } else {
-        // Chunked upload
-        for (let i = 0; i < state.totalChunks; i++) {
-          if (pausedUploads.current.has(uploadId) || signal.aborted) {
-            state.status = 'paused';
+      const tusUpload = new tus.Upload(file, {
+        endpoint: `https://${projectId}.supabase.co/storage/v1/upload/resumable`,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          apikey: anonKey,
+        },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        chunkSize: TUS_CHUNK_SIZE,
+        metadata: {
+          bucketName: 'user-files',
+          objectName: state.storagePath,
+          contentType: file.type || 'application/octet-stream',
+          cacheControl: '3600',
+        },
+        onError: async (error) => {
+          console.error('TUS upload error:', error);
+          if (!pausedUploads.current.has(uploadId)) {
+            state.status = 'error';
+            state.error = error.message || 'Upload failed';
             setUploads(prev => ({ ...prev, [uploadId]: state }));
             await saveUploadState(state);
-            uploadQueue.current.shift();
-            processNextInQueue();
-            return;
+            toast.error(`Failed to upload ${state.fileName}`);
           }
-
-          if (state.uploadedChunks.includes(i)) continue;
-
-          const start = i * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const chunk = file.slice(start, end);
-          const chunkPath = `${state.storagePath}.chunk_${i}`;
-
-          // Apply throttling delay if set
-          const currentThrottle = throttleRateRef.current;
-          if (currentThrottle > 0) {
-            const chunkSize = end - start;
-            const expectedTime = (chunkSize / currentThrottle) * 1000; // ms
-            const startTime = Date.now();
-            await uploadChunkWithRetry(chunk, chunkPath, signal);
-            const elapsed = Date.now() - startTime;
-            if (elapsed < expectedTime) {
-              await new Promise(r => setTimeout(r, expectedTime - elapsed));
-            }
-          } else {
-            await uploadChunkWithRetry(chunk, chunkPath, signal);
-          }
-
-          state.uploadedChunks.push(i);
-          state.bytesUploaded = Math.min(state.uploadedChunks.length * CHUNK_SIZE, file.size);
-          state.progress = Math.round((state.uploadedChunks.length / state.totalChunks) * 95);
-          state.speed = calculateSpeed(uploadId, state.bytesUploaded);
-          state.eta = state.speed > 0 ? (file.size - state.bytesUploaded) / state.speed : 0;
-
+          delete tusUploads.current[uploadId];
+          delete speedTracking.current[uploadId];
+          uploadQueue.current.shift();
+          processingRef.current = false;
+          processNextInQueue();
+        },
+        onProgress: (bytesUploaded, bytesTotal) => {
+          state.bytesUploaded = bytesUploaded;
+          state.progress = Math.round((bytesUploaded / bytesTotal) * 100);
+          state.speed = calculateSpeed(uploadId, bytesUploaded);
+          state.eta = state.speed > 0 ? (bytesTotal - bytesUploaded) / state.speed : 0;
           setUploads(prev => ({ ...prev, [uploadId]: { ...state } }));
-          await saveUploadState(state);
-        }
-
-        if (state.uploadedChunks.length === state.totalChunks) {
-          state.progress = 97;
-          setUploads(prev => ({ ...prev, [uploadId]: { ...state } }));
-          
-          await combineChunks(state.storagePath, state.totalChunks, state.fileType);
+        },
+        onSuccess: async () => {
           state.progress = 100;
           state.status = 'completed';
-        }
+          state.bytesUploaded = file.size;
+          
+          // Create database record
+          const fileName = state.folderPath ? `${state.folderPath}/${state.fileName}` : state.fileName;
+          
+          const { data: existingFile } = await supabase
+            .from('files')
+            .select('id')
+            .eq('storage_path', state.storagePath)
+            .maybeSingle();
+          
+          if (!existingFile) {
+            const insertData: any = {
+              user_id: currentUserId.current,
+              name: fileName,
+              size_bytes: file.size,
+              mime_type: state.fileType || 'application/octet-stream',
+              storage_path: state.storagePath
+            };
+            
+            const { error: dbError } = await supabase.from('files').insert(insertData);
+            if (dbError) {
+              console.error('DB insert error:', dbError);
+            }
+          }
+
+          setUploads(prev => ({ ...prev, [uploadId]: state }));
+          await deleteUploadState(uploadId);
+          toast.success(`${state.fileName} uploaded successfully!`);
+          
+          delete tusUploads.current[uploadId];
+          delete speedTracking.current[uploadId];
+          uploadQueue.current.shift();
+          processingRef.current = false;
+          processNextInQueue();
+        },
+      });
+
+      // Store for pause/resume
+      tusUploads.current[uploadId] = tusUpload;
+
+      // Check for previous uploads to resume
+      const previousUploads = await tusUpload.findPreviousUploads();
+      if (previousUploads.length > 0) {
+        tusUpload.resumeFromPreviousUpload(previousUploads[0]);
       }
 
-      // Create database record - check if already exists first
-      const fileName = state.folderPath ? `${state.folderPath}/${state.fileName}` : state.fileName;
-      
-      // Check if a record with this storage_path already exists
-      const { data: existingFile } = await supabase
-        .from('files')
-        .select('id')
-        .eq('storage_path', state.storagePath)
-        .maybeSingle();
-      
-      if (!existingFile) {
-        const { error: dbError } = await supabase
-          .from('files')
-          .insert({
-            user_id: currentUserId.current,
-            name: fileName,
-            size_bytes: file.size,
-            mime_type: state.fileType,
-            storage_path: state.storagePath
-          });
-
-        if (dbError) throw dbError;
-      }
-
-      setUploads(prev => ({ ...prev, [uploadId]: state }));
-      await deleteUploadState(uploadId);
-      toast.success(`${state.fileName} uploaded successfully!`);
+      tusUpload.start();
 
     } catch (error: any) {
+      console.error('Upload setup error:', error);
       if (!pausedUploads.current.has(uploadId)) {
         state.status = 'error';
         state.error = error.message || 'Upload failed';
@@ -369,15 +308,13 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         await saveUploadState(state);
         toast.error(`Failed to upload ${state.fileName}`);
       }
-    } finally {
-      delete abortControllers.current[uploadId];
-      delete speedTracking.current[uploadId];
       uploadQueue.current.shift();
+      processingRef.current = false;
       processNextInQueue();
     }
-  }, [uploads, saveUploadState, deleteUploadState]);
+  }, [saveUploadState, deleteUploadState]);
 
-  const addFiles = useCallback((files: File[], userId: string, folderPath?: string) => {
+  const addFiles = useCallback((files: File[], userId: string, folderPath?: string, folderId?: string) => {
     currentUserId.current = userId;
     const newUploads: Record<string, UploadItem> = {};
     const newQueueItems: string[] = [];
@@ -388,9 +325,6 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       const storagePath = folderPath 
         ? `${userId}/${folderPath}/${Date.now()}-${sanitizedName}`
         : `${userId}/${Date.now()}-${sanitizedName}`;
-      const totalChunks = file.size > 50 * 1024 * 1024 
-        ? Math.ceil(file.size / CHUNK_SIZE) 
-        : 1;
 
       fileRefs.current[uploadId] = file;
 
@@ -401,7 +335,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         fileType: file.type,
         storagePath,
         uploadedChunks: [],
-        totalChunks,
+        totalChunks: Math.ceil(file.size / TUS_CHUNK_SIZE),
         status: 'queued',
         progress: 0,
         bytesUploaded: 0,
@@ -416,21 +350,20 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       newQueueItems.push(uploadId);
     });
 
-    // Update the ref immediately so queue processing can see the new items
     uploadsRef.current = { ...uploadsRef.current, ...newUploads };
     setUploads(prev => ({ ...prev, ...newUploads }));
     uploadQueue.current.push(...newQueueItems);
 
-    if (!isUploading) {
-      // Start on next tick to avoid racing React state updates
+    if (!isUploading && !processingRef.current) {
       setTimeout(() => processNextInQueue(), 0);
     }
   }, [uploads, isUploading, processNextInQueue]);
 
   const pauseUpload = useCallback((id: string) => {
     pausedUploads.current.add(id);
-    if (abortControllers.current[id]) {
-      abortControllers.current[id].abort();
+    
+    if (tusUploads.current[id]) {
+      tusUploads.current[id].abort();
     }
 
     const next = { ...uploadsRef.current[id], status: 'paused' as const };
@@ -440,8 +373,16 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       ...prev,
       [id]: { ...prev[id], status: 'paused' }
     }));
+    
+    // If this was the active upload, move to next
+    if (uploadQueue.current[0] === id) {
+      uploadQueue.current.shift();
+      processingRef.current = false;
+      processNextInQueue();
+    }
+    
     toast.info('Upload paused');
-  }, []);
+  }, [processNextInQueue]);
 
   const resumeUpload = useCallback((id: string, file: File) => {
     pausedUploads.current.delete(id);
@@ -457,35 +398,38 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
     uploadQueue.current.push(id);
 
-    if (!isUploading) {
+    if (!isUploading && !processingRef.current) {
       setTimeout(() => processNextInQueue(), 0);
     }
   }, [isUploading, processNextInQueue]);
 
   const cancelUpload = useCallback(async (id: string) => {
     pausedUploads.current.add(id);
-    if (abortControllers.current[id]) {
-      abortControllers.current[id].abort();
-    }
-
-    const state = uploads[id];
-    if (state && state.totalChunks > 1) {
-      const chunkPaths = state.uploadedChunks.map(i => `${state.storagePath}.chunk_${i}`);
-      if (chunkPaths.length > 0) {
-        await supabase.storage.from('user-files').remove(chunkPaths);
-      }
+    
+    if (tusUploads.current[id]) {
+      tusUploads.current[id].abort();
+      delete tusUploads.current[id];
     }
 
     uploadQueue.current = uploadQueue.current.filter(qId => qId !== id);
     await deleteUploadState(id);
     delete fileRefs.current[id];
     
+    // If this was the active upload, allow next to process
+    if (uploadsRef.current[id]?.status === 'uploading') {
+      processingRef.current = false;
+    }
+    
     setUploads(prev => {
       const newUploads = { ...prev };
       delete newUploads[id];
       return newUploads;
     });
-  }, [uploads, deleteUploadState]);
+    
+    if (!processingRef.current) {
+      processNextInQueue();
+    }
+  }, [deleteUploadState, processNextInQueue]);
 
   const clearCompleted = useCallback(() => {
     setUploads(prev => {
@@ -504,13 +448,12 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     if (queueIndex === -1) return;
 
     const newIndex = direction === 'up' ? queueIndex - 1 : queueIndex + 1;
-    if (newIndex < 1 || newIndex >= uploadQueue.current.length) return; // Can't move first item (currently uploading)
+    if (newIndex < 1 || newIndex >= uploadQueue.current.length) return;
 
     const temp = uploadQueue.current[queueIndex];
     uploadQueue.current[queueIndex] = uploadQueue.current[newIndex];
     uploadQueue.current[newIndex] = temp;
 
-    // Update priorities
     setUploads(prev => {
       const newUploads = { ...prev };
       uploadQueue.current.forEach((uploadId, index) => {
@@ -558,13 +501,11 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
   const moveToFront = useCallback((id: string) => {
     const queueIndex = uploadQueue.current.indexOf(id);
-    if (queueIndex <= 1) return; // Already first or currently uploading
+    if (queueIndex <= 1) return;
     
-    // Move to position 1 (after currently uploading)
     uploadQueue.current.splice(queueIndex, 1);
     uploadQueue.current.splice(1, 0, id);
     
-    // Update priorities
     setUploads(prev => {
       const newUploads = { ...prev };
       uploadQueue.current.forEach((uploadId, index) => {
@@ -618,7 +559,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     
     uploadQueue.current.push(id);
     
-    if (!isUploading) {
+    if (!isUploading && !processingRef.current) {
       setTimeout(() => processNextInQueue(), 0);
     }
     
