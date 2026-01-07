@@ -287,33 +287,24 @@ const Dashboard = () => {
 
   const handleUpdateShare = async (expirationDays: number | null, password: string | null) => {
     try {
-      const updates: any = {};
+      // Use edge function for secure bcrypt password hashing
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token;
       
-      if (expirationDays !== null) {
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + expirationDays);
-        updates.expires_at = expiresAt.toISOString();
-      } else {
-        updates.expires_at = null;
+      if (!accessToken) {
+        throw new Error('Not authenticated');
       }
 
-      if (password) {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(password);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        updates.password_hash = hashHex;
-      } else {
-        updates.password_hash = null;
-      }
-
-      const { error } = await supabase
-        .from('shares')
-        .update(updates)
-        .eq('token', shareToken);
+      const { data, error } = await supabase.functions.invoke('update-share', {
+        body: {
+          shareToken,
+          password,
+          expirationDays
+        }
+      });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     } catch (error: any) {
       throw error;
     }

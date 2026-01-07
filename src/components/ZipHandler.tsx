@@ -4,10 +4,17 @@ import { saveAs } from 'file-saver';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-import { Archive, FolderOpen, Download, Loader2 } from 'lucide-react';
+import { Archive, FolderOpen, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatBytes } from '@/lib/utils';
+
+// Security constants for ZIP extraction
+const MAX_TOTAL_SIZE = 1024 * 1024 * 1024; // 1GB max total extracted size
+const MAX_FILE_COUNT = 1000; // Maximum files in archive
+const MAX_INDIVIDUAL_FILE_SIZE = 100 * 1024 * 1024; // 100MB per file
+const MAX_PATH_DEPTH = 10; // Maximum directory nesting
+const MAX_FILENAME_LENGTH = 255;
 
 interface ZipFile {
   id: string;
@@ -20,9 +27,17 @@ interface ZipHandlerProps {
   files: ZipFile[];
   userId: string;
   onFilesExtracted?: () => void;
+  userQuotaBytes?: number;
+  userUsedBytes?: number;
 }
 
-export const ZipHandler = ({ files, userId, onFilesExtracted }: ZipHandlerProps) => {
+export const ZipHandler = ({ 
+  files, 
+  userId, 
+  onFilesExtracted,
+  userQuotaBytes = MAX_TOTAL_SIZE,
+  userUsedBytes = 0
+}: ZipHandlerProps) => {
   const [extractDialogOpen, setExtractDialogOpen] = useState(false);
   const [extractingFile, setExtractingFile] = useState<ZipFile | null>(null);
   const [extractedFiles, setExtractedFiles] = useState<{ name: string; size: number }[]>([]);
@@ -86,6 +101,31 @@ export const ZipHandler = ({ files, userId, onFilesExtracted }: ZipHandlerProps)
     }
   };
 
+  /**
+   * Validate path for security issues
+   */
+  const validatePath = (relativePath: string): { valid: boolean; error?: string } => {
+    const pathParts = relativePath.split('/');
+    
+    // Check path depth
+    if (pathParts.length > MAX_PATH_DEPTH) {
+      return { valid: false, error: `Path too deep: ${relativePath}` };
+    }
+    
+    // Check for path traversal attempts
+    if (pathParts.some(part => part === '..' || part === '.')) {
+      return { valid: false, error: `Invalid path traversal detected: ${relativePath}` };
+    }
+    
+    // Check filename length
+    const fileName = pathParts[pathParts.length - 1];
+    if (!fileName || fileName.length > MAX_FILENAME_LENGTH) {
+      return { valid: false, error: `Invalid filename length: ${fileName}` };
+    }
+    
+    return { valid: true };
+  };
+
   const extractZip = async (file: ZipFile) => {
     setExtractingFile(file);
     setExtractDialogOpen(true);
@@ -106,36 +146,98 @@ export const ZipHandler = ({ files, userId, onFilesExtracted }: ZipHandlerProps)
       const blob = await response.blob();
       
       const zip = await JSZip.loadAsync(blob);
-      const fileList: { name: string; size: number }[] = [];
       const entries = Object.entries(zip.files);
       
-      for (let i = 0; i < entries.length; i++) {
-        const [relativePath, zipEntry] = entries[i];
+      // Pre-validation phase: check total size, file count, and paths
+      let totalSize = 0;
+      let fileCount = 0;
+      const validEntries: [string, JSZip.JSZipObject][] = [];
+      
+      for (const [relativePath, zipEntry] of entries) {
+        if (zipEntry.dir) continue;
         
-        if (!zipEntry.dir) {
-          const content = await zipEntry.async('blob');
-          fileList.push({ name: relativePath, size: content.size });
+        // Check file count
+        fileCount++;
+        if (fileCount > MAX_FILE_COUNT) {
+          throw new Error(`Archive contains too many files (maximum ${MAX_FILE_COUNT})`);
+        }
+        
+        // Validate path security
+        const pathValidation = validatePath(relativePath);
+        if (!pathValidation.valid) {
+          console.warn(`Skipping invalid path: ${relativePath}`);
+          continue;
+        }
+        
+        // Get uncompressed size from metadata if available
+        const uncompressedSize = (zipEntry as any)._data?.uncompressedSize;
+        if (uncompressedSize && uncompressedSize > MAX_INDIVIDUAL_FILE_SIZE) {
+          throw new Error(`File too large: ${relativePath} (${formatBytes(uncompressedSize)})`);
+        }
+        
+        validEntries.push([relativePath, zipEntry]);
+      }
+      
+      // Check user quota before extraction
+      const availableSpace = userQuotaBytes - userUsedBytes;
+      if (totalSize > availableSpace) {
+        throw new Error(`Insufficient storage quota. Archive may exceed available space.`);
+      }
+      
+      // Confirm if many files
+      if (validEntries.length > 100) {
+        const confirmExtract = confirm(
+          `This archive contains ${validEntries.length} files. Continue extraction?`
+        );
+        if (!confirmExtract) {
+          setIsProcessing(false);
+          setExtractDialogOpen(false);
+          return;
+        }
+      }
+      
+      const fileList: { name: string; size: number }[] = [];
+      let extractedSize = 0;
+      
+      // Extraction phase with runtime size checking
+      for (let i = 0; i < validEntries.length; i++) {
+        const [relativePath, zipEntry] = validEntries[i];
+        
+        const content = await zipEntry.async('blob');
+        
+        // Check individual file size
+        if (content.size > MAX_INDIVIDUAL_FILE_SIZE) {
+          console.warn(`Skipping oversized file: ${relativePath}`);
+          continue;
+        }
+        
+        // Check running total
+        extractedSize += content.size;
+        if (extractedSize > MAX_TOTAL_SIZE) {
+          throw new Error(`Archive extraction exceeded maximum size limit (${formatBytes(MAX_TOTAL_SIZE)})`);
+        }
+        
+        fileList.push({ name: relativePath, size: content.size });
 
-          // Upload extracted file to storage
-          const sanitizedName = sanitizeFileName(relativePath.split('/').pop() || relativePath);
-          const storagePath = `${userId}/${Date.now()}-${sanitizedName}`;
+        // Upload extracted file to storage
+        const sanitizedName = sanitizeFileName(relativePath.split('/').pop() || relativePath);
+        const storagePath = `${userId}/${Date.now()}-${sanitizedName}`;
 
-          const { error: uploadError } = await supabase.storage
-            .from('user-files')
-            .upload(storagePath, content);
+        const { error: uploadError } = await supabase.storage
+          .from('user-files')
+          .upload(storagePath, content);
 
-          if (!uploadError) {
-            await supabase.from('files').insert({
-              user_id: userId,
-              name: relativePath.split('/').pop() || relativePath,
-              size_bytes: content.size,
-              mime_type: getMimeType(relativePath),
-              storage_path: storagePath
-            });
-          }
+        if (!uploadError) {
+          await supabase.from('files').insert({
+            user_id: userId,
+            name: relativePath.split('/').pop() || relativePath,
+            size_bytes: content.size,
+            mime_type: getMimeType(relativePath),
+            storage_path: storagePath
+          });
         }
 
-        setProgress(((i + 1) / entries.length) * 100);
+        setProgress(((i + 1) / validEntries.length) * 100);
       }
 
       setExtractedFiles(fileList);
@@ -143,7 +245,8 @@ export const ZipHandler = ({ files, userId, onFilesExtracted }: ZipHandlerProps)
       onFilesExtracted?.();
     } catch (error) {
       console.error('Extraction error:', error);
-      toast.error('Failed to extract archive');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to extract archive';
+      toast.error(errorMessage);
     } finally {
       setIsProcessing(false);
     }
