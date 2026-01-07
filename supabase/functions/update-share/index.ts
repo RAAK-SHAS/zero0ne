@@ -23,9 +23,9 @@ serve(async (req) => {
       );
     }
 
-    if (password && (typeof password !== 'string' || password.length < 4 || password.length > 128)) {
+    if (password && (typeof password !== 'string' || password.length < 8 || password.length > 128)) {
       return new Response(
-        JSON.stringify({ error: 'Password must be between 4 and 128 characters' }),
+        JSON.stringify({ error: 'Password must be between 8 and 128 characters' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
