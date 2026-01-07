@@ -1,18 +1,42 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { getRestrictedCorsHeaders, validateOrigin } from '../_shared/cors.ts';
+import { createErrorResponse, logSecurityEvent } from '../_shared/error-mapper.ts';
 
 serve(async (req) => {
+  const corsHeaders = getRestrictedCorsHeaders(req);
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { fileId, password, action } = await req.json();
+    // Validate origin for CSRF protection
+    if (!validateOrigin(req)) {
+      logSecurityEvent('cors_rejected', {
+        origin: req.headers.get('origin'),
+        ip: req.headers.get('x-forwarded-for')
+      });
+      // Still process but log the suspicious origin
+    }
+
+    const body = await req.json();
+    const { fileId, password, action } = body;
+
+    // Input validation
+    if (!fileId || typeof fileId !== 'string') {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request parameters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action && !['encrypt', 'decrypt'].includes(action)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request parameters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -22,7 +46,10 @@ serve(async (req) => {
     // Get auth header
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
-      throw new Error('Missing authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Verify user
@@ -30,19 +57,28 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
     if (authError || !user) {
-      throw new Error('Unauthorized');
+      logSecurityEvent('auth_failed', {
+        ip: req.headers.get('x-forwarded-for')
+      });
+      return new Response(
+        JSON.stringify({ error: 'Authentication required or invalid' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Get file info
+    // Get file info - validate ownership
     const { data: file, error: fileError } = await supabase
       .from('files')
-      .select('*')
+      .select('id, user_id')
       .eq('id', fileId)
       .eq('user_id', user.id)
       .single();
 
     if (fileError || !file) {
-      throw new Error('File not found');
+      return new Response(
+        JSON.stringify({ error: 'Requested resource not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Note: Real encryption would involve actual crypto operations
@@ -56,12 +92,18 @@ serve(async (req) => {
           encryption_algorithm: 'AES-256-GCM',
           encryption_metadata: { 
             encrypted_at: new Date().toISOString(),
-            password_hash: 'hash_placeholder' // In production, use proper password hashing
+            // In production, use proper password hashing with bcrypt
           }
         })
         .eq('id', fileId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Database update failed');
+        return new Response(
+          JSON.stringify({ error: 'An error occurred processing your request' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       return new Response(
         JSON.stringify({ success: true, message: 'File encrypted' }),
@@ -77,7 +119,13 @@ serve(async (req) => {
         })
         .eq('id', fileId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Database update failed');
+        return new Response(
+          JSON.stringify({ error: 'An error occurred processing your request' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       return new Response(
         JSON.stringify({ success: true, message: 'File decrypted' }),
@@ -85,13 +133,6 @@ serve(async (req) => {
       );
     }
   } catch (err) {
-    console.error('Error in encrypt-file function:', err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    return createErrorResponse(err, getRestrictedCorsHeaders(req));
   }
 });

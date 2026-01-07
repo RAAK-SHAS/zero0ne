@@ -1,23 +1,21 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.86.0'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { wildcardCorsHeaders } from '../_shared/cors.ts';
+import { createErrorResponse, logSecurityEvent } from '../_shared/error-mapper.ts';
+import { verifyPassword, isLegacySha256Hash, verifyLegacySha256 } from '../_shared/password-hash.ts';
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: wildcardCorsHeaders });
   }
 
   try {
     const { token, password } = await req.json();
 
-    if (!token) {
+    if (!token || typeof token !== 'string' || token.length < 10 || token.length > 100) {
       return new Response(
-        JSON.stringify({ error: 'Share token is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Invalid share token format' }),
+        { status: 400, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -33,7 +31,7 @@ Deno.serve(async (req) => {
       }
     );
 
-    console.log(`Validating share token: ${token}`);
+    console.log(`Validating share token`);
 
     // Validate the share token and get file info
     const { data: share, error: shareError } = await supabaseAdmin
@@ -43,43 +41,55 @@ Deno.serve(async (req) => {
       .single();
 
     if (shareError || !share) {
-      console.error('Share token validation failed:', shareError);
+      logSecurityEvent('share_access_failed', {
+        reason: 'invalid_token',
+        ip: req.headers.get('x-forwarded-for')
+      });
       return new Response(
         JSON.stringify({ error: 'Invalid or expired share link' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 404, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Check if share has expired
     if (share.expires_at && new Date(share.expires_at) < new Date()) {
-      console.log('Share link has expired');
+      logSecurityEvent('share_access_failed', {
+        reason: 'expired',
+        ip: req.headers.get('x-forwarded-for')
+      });
       return new Response(
         JSON.stringify({ error: 'Share link has expired' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 403, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Check password if required
     if (share.password_hash) {
-      if (!password) {
+      if (!password || typeof password !== 'string') {
         return new Response(
           JSON.stringify({ error: 'Password required', passwordRequired: true }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 401, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Hash provided password using Web Crypto API
-      const encoder = new TextEncoder();
-      const data = encoder.encode(password);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      // Verify password - support both bcrypt and legacy SHA-256
+      let isValidPassword = false;
+      
+      if (isLegacySha256Hash(share.password_hash)) {
+        // Legacy SHA-256 verification for backwards compatibility
+        isValidPassword = await verifyLegacySha256(password, share.password_hash);
+      } else {
+        // Modern bcrypt verification
+        isValidPassword = await verifyPassword(password, share.password_hash);
+      }
 
-      if (hashHex !== share.password_hash) {
-        console.log('Incorrect password provided');
+      if (!isValidPassword) {
+        logSecurityEvent('share_password_failed', {
+          ip: req.headers.get('x-forwarded-for')
+        });
         return new Response(
           JSON.stringify({ error: 'Incorrect password', passwordRequired: true }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 401, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
@@ -87,15 +97,14 @@ Deno.serve(async (req) => {
     // Get file details
     const { data: file, error: fileError } = await supabaseAdmin
       .from('files')
-      .select('*')
+      .select('id, name, size_bytes, mime_type, storage_path, created_at')
       .eq('id', share.file_id)
       .single();
 
     if (fileError || !file) {
-      console.error('File retrieval failed:', fileError);
       return new Response(
         JSON.stringify({ error: 'File not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 404, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -105,14 +114,14 @@ Deno.serve(async (req) => {
       .createSignedUrl(file.storage_path, 60);
 
     if (signedUrlError || !signedUrlData) {
-      console.error('Failed to create signed URL:', signedUrlError);
+      console.error('Failed to create signed URL');
       return new Response(
         JSON.stringify({ error: 'Failed to generate download link' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Successfully generated signed URL for file: ${file.name}`);
+    console.log(`Successfully generated signed URL for shared file`);
 
     return new Response(
       JSON.stringify({
@@ -121,20 +130,15 @@ Deno.serve(async (req) => {
           name: file.name,
           size_bytes: file.size_bytes,
           mime_type: file.mime_type,
-          storage_path: file.storage_path,
           created_at: file.created_at
         },
         signedUrl: signedUrlData.signedUrl,
         passwordRequired: !!share.password_hash
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Unexpected error:', error);
-    return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return createErrorResponse(error, wildcardCorsHeaders);
   }
 });

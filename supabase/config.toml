@@ -7,4 +7,7 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.encrypt-file]
-verify_jwt = true
+verify_jwt = false
+
+[functions.update-share]
+verify_jwt = false
