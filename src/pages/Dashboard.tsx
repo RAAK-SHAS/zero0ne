@@ -20,6 +20,7 @@ import { EncryptionDialog } from '@/components/EncryptionDialog';
 import { BatchActions } from '@/components/BatchActions';
 import { SearchFilter } from '@/components/SearchFilter';
 import { ZipHandler } from '@/components/ZipHandler';
+import { ArchiveManager, isArchiveExtension, ArchivePreviewWrapper } from '@/components/ArchiveManager';
 import { GlobalUploadIndicator } from '@/components/GlobalUploadIndicator';
 import { DownloadManager } from '@/components/DownloadManager';
 import { UploadQueuePanel } from '@/components/UploadQueuePanel';
@@ -119,6 +120,7 @@ const Dashboard = () => {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [filterFavorites, setFilterFavorites] = useState(false);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [previewArchiveFile, setPreviewArchiveFile] = useState<FileItem | null>(null);
   
   const { addFiles, isUploading, uploads, resumeUpload, cancelUpload, getPausedUploadsNeedingFile } = useUploadManager();
   const { downloadFile, downloadMultipleAsZip } = useDownloadManager();
@@ -417,54 +419,12 @@ const Dashboard = () => {
     const file = files.find(f => f.id === fileId);
     if (!file) return;
 
-    toast.info('Extracting archive...');
-
-    try {
-      const { data: signedUrl } = await supabase.storage
-        .from('user-files')
-        .createSignedUrl(file.storage_path, 3600);
-
-      if (!signedUrl?.signedUrl) {
-        throw new Error('Failed to get file URL');
-      }
-
-      const response = await fetch(signedUrl.signedUrl);
-      const blob = await response.blob();
-      
-      const zip = await JSZip.loadAsync(blob);
-      const entries = Object.entries(zip.files);
-      let extractedCount = 0;
-      
-      for (const [relativePath, zipEntry] of entries) {
-        if (!zipEntry.dir) {
-          const content = await zipEntry.async('blob');
-          const fileName = relativePath.split('/').pop() || relativePath;
-          const sanitizedName = fileName.replace(/[^\w\s.-]/g, '_').replace(/\s+/g, '_').slice(0, 100);
-          const storagePath = `${user?.id}/${Date.now()}-${sanitizedName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('user-files')
-            .upload(storagePath, content);
-
-          if (!uploadError) {
-            await supabase.from('files').insert({
-              user_id: user!.id,
-              name: fileName,
-              size_bytes: content.size,
-              mime_type: getMimeType(fileName),
-              storage_path: storagePath,
-              folder_id: currentFolderId,
-            });
-            extractedCount++;
-          }
-        }
-      }
-
-      toast.success(`Extracted ${extractedCount} files!`);
-      loadData();
-    } catch (error) {
-      console.error('Extraction error:', error);
-      toast.error('Failed to extract archive');
+    // Check if it's an archive file
+    if (isArchiveExtension(file.name)) {
+      // Use the new ArchiveManager for preview
+      setPreviewArchiveFile(file);
+    } else {
+      toast.error('Not a supported archive format');
     }
   };
 
@@ -738,12 +698,26 @@ const Dashboard = () => {
 
       {selectedFiles.length > 0 && (
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-40">
-          <ZipHandler 
+          <ArchiveManager 
             files={files.filter(f => selectedFiles.includes(f.id))} 
             userId={user?.id || ''} 
             onFilesExtracted={loadData}
+            userQuotaBytes={profile?.storage_quota_bytes}
+            userUsedBytes={profile?.storage_used_bytes}
           />
         </div>
+      )}
+      
+      {/* Archive Preview Manager */}
+      {previewArchiveFile && (
+        <ArchivePreviewWrapper
+          file={previewArchiveFile}
+          userId={user?.id || ''}
+          onClose={() => setPreviewArchiveFile(null)}
+          onFilesExtracted={loadData}
+          userQuotaBytes={profile?.storage_quota_bytes}
+          userUsedBytes={profile?.storage_used_bytes}
+        />
       )}
 
       <BatchActions
