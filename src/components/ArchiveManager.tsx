@@ -1015,11 +1015,7 @@ export const ArchivePreviewWrapper = ({
     return mimeTypes[ext || ''] || 'application/octet-stream';
   };
 
-  // Load archive on mount
-  useEffect(() => {
-    loadArchive();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Note: loadArchive is defined below and called in useEffect after definition
 
   const loadArchive = async () => {
     setIsProcessing(true);
@@ -1096,6 +1092,12 @@ export const ArchivePreviewWrapper = ({
       setIsProcessing(false);
     }
   };
+
+  // Load archive on mount
+  useEffect(() => {
+    loadArchive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePasswordSubmit = async () => {
     if (!pendingArchiveBlob) return;
