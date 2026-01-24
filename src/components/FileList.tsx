@@ -1,4 +1,5 @@
-import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive } from 'lucide-react';
+import { memo, useCallback } from 'react';
+import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive, Star } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -6,9 +7,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { formatBytes } from '@/lib/utils';
+import { formatBytes, cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
 interface FileItem {
@@ -19,6 +21,7 @@ interface FileItem {
   created_at: string;
   storage_path: string;
   is_encrypted?: boolean;
+  is_favorite?: boolean;
 }
 
 interface FileListProps {
@@ -34,14 +37,181 @@ interface FileListProps {
   onEncrypt: (fileId: string) => void;
   onVersionHistory: (fileId: string) => void;
   onExtractZip?: (fileId: string) => void;
+  onToggleFavorite?: (fileId: string, current: boolean) => void;
 }
 
 const isArchiveFile = (fileName: string): boolean => {
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  return ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext || '');
+  return /\.(zip|rar|7z|tar|gz|bz2|xz|tgz)$/i.test(fileName);
 };
 
-export const FileList = ({ 
+// Memoized file row component
+const FileRow = memo(({
+  file,
+  isSelected,
+  onSelectFile,
+  onDownload,
+  onShare,
+  onDelete,
+  onRename,
+  onPreview,
+  onEncrypt,
+  onVersionHistory,
+  onExtractZip,
+  onToggleFavorite,
+}: {
+  file: FileItem;
+  isSelected: boolean;
+  onSelectFile: (fileId: string) => void;
+  onDownload: (fileId: string) => void;
+  onShare: (fileId: string) => void;
+  onDelete: (fileId: string) => void;
+  onRename: (fileId: string) => void;
+  onPreview: (fileId: string) => void;
+  onEncrypt: (fileId: string) => void;
+  onVersionHistory: (fileId: string) => void;
+  onExtractZip?: (fileId: string) => void;
+  onToggleFavorite?: (fileId: string, current: boolean) => void;
+}) => {
+  const handleCheckboxChange = useCallback(() => {
+    onSelectFile(file.id);
+  }, [file.id, onSelectFile]);
+
+  const handlePreviewClick = useCallback(() => {
+    onPreview(file.id);
+  }, [file.id, onPreview]);
+
+  const handleFavoriteClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleFavorite?.(file.id, file.is_favorite || false);
+  }, [file.id, file.is_favorite, onToggleFavorite]);
+
+  return (
+    <div
+      className={cn(
+        "group flex items-center justify-between p-4 border rounded-xl transition-all duration-200 hover:bg-accent/50 hover:shadow-md animate-fade-in",
+        isSelected && "bg-accent/30 border-primary shadow-sm"
+      )}
+    >
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <Checkbox 
+          checked={isSelected}
+          onCheckedChange={handleCheckboxChange}
+          className="transition-transform hover:scale-110"
+        />
+        
+        {/* Favorite button */}
+        {onToggleFavorite && (
+          <button
+            onClick={handleFavoriteClick}
+            className="transition-transform hover:scale-110"
+          >
+            <Star
+              className={cn(
+                "h-4 w-4 transition-colors duration-200",
+                file.is_favorite
+                  ? "fill-yellow-400 text-yellow-400"
+                  : "text-muted-foreground/40 hover:text-yellow-400"
+              )}
+            />
+          </button>
+        )}
+        
+        <div 
+          className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer group/preview"
+          onClick={handlePreviewClick}
+        >
+          <div className="transition-transform duration-200 group-hover/preview:scale-105">
+            <FileIcon 
+              fileName={file.name}
+              mimeType={file.mime_type}
+              storagePath={file.storage_path}
+              showThumbnail
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="font-medium truncate group-hover/preview:text-primary transition-colors">
+                {file.name}
+              </p>
+              {file.is_encrypted && (
+                <div className="p-0.5 rounded bg-yellow-500/10">
+                  <Lock className="h-3 w-3 text-yellow-500" />
+                </div>
+              )}
+              {isArchiveFile(file.name) && (
+                <div className="p-0.5 rounded bg-primary/10">
+                  <Archive className="h-3 w-3 text-primary" />
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 text-sm text-muted-foreground">
+              <span className="tabular-nums">{formatBytes(file.size_bytes)}</span>
+              <span className="text-muted-foreground/50">•</span>
+              <span>{format(new Date(file.created_at), 'MMM d, yyyy')}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="icon"
+            className="opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem onClick={() => onPreview(file.id)}>
+            <Eye className="h-4 w-4 mr-2" />
+            Preview
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onDownload(file.id)}>
+            <Download className="h-4 w-4 mr-2" />
+            Download
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onShare(file.id)}>
+            <Share2 className="h-4 w-4 mr-2" />
+            Share
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => onRename(file.id)}>
+            <Edit2 className="h-4 w-4 mr-2" />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onVersionHistory(file.id)}>
+            <Clock className="h-4 w-4 mr-2" />
+            Version History
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onEncrypt(file.id)}>
+            <Lock className="h-4 w-4 mr-2" />
+            {file.is_encrypted ? 'Decrypt' : 'Encrypt'}
+          </DropdownMenuItem>
+          {isArchiveFile(file.name) && onExtractZip && (
+            <DropdownMenuItem onClick={() => onExtractZip(file.id)}>
+              <Archive className="h-4 w-4 mr-2" />
+              Extract Archive
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem 
+            onClick={() => onDelete(file.id)}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Move to Trash
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+});
+
+FileRow.displayName = 'FileRow';
+
+export const FileList = memo(({ 
   files, 
   selectedFiles,
   onSelectFile,
@@ -53,13 +223,17 @@ export const FileList = ({
   onPreview,
   onEncrypt,
   onVersionHistory,
-  onExtractZip
+  onExtractZip,
+  onToggleFavorite
 }: FileListProps) => {
   if (files.length === 0) {
     return (
-      <div className="text-center py-12">
-        <FileIcon fileName="" mimeType={null} className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <p className="text-muted-foreground">No files yet. Upload your first file!</p>
+      <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
+        <div className="p-4 rounded-full bg-muted/50 mb-4">
+          <FileIcon fileName="" mimeType={null} className="h-12 w-12 text-muted-foreground" />
+        </div>
+        <p className="text-muted-foreground font-medium">No files yet</p>
+        <p className="text-xs text-muted-foreground/70 mt-1">Upload your first file to get started!</p>
       </div>
     );
   }
@@ -68,103 +242,43 @@ export const FileList = ({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground">
+      <div className="flex items-center gap-3 px-4 py-2 text-sm text-muted-foreground border-b">
         <Checkbox 
           checked={allSelected}
           onCheckedChange={onSelectAll}
         />
-        <span>Select all</span>
+        <span className="font-medium">
+          {selectedFiles.length > 0 
+            ? `${selectedFiles.length} selected` 
+            : 'Select all'
+          }
+        </span>
+        <span className="text-muted-foreground/50 ml-auto">
+          {files.length} file{files.length !== 1 ? 's' : ''}
+        </span>
       </div>
       
-      {files.map((file) => {
-        const isSelected = selectedFiles.includes(file.id);
-        
-        return (
-          <div
+      <div className="space-y-2">
+        {files.map((file) => (
+          <FileRow
             key={file.id}
-            className={`flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors ${
-              isSelected ? 'bg-accent/30 border-primary' : ''
-            }`}
-          >
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <Checkbox 
-                checked={isSelected}
-                onCheckedChange={() => onSelectFile(file.id)}
-              />
-              
-              <div 
-                className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer"
-                onClick={() => onPreview(file.id)}
-              >
-                <FileIcon 
-                  fileName={file.name}
-                  mimeType={file.mime_type}
-                  storagePath={file.storage_path}
-                  showThumbnail
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium truncate">{file.name}</p>
-                    {file.is_encrypted && <Lock className="h-3 w-3 text-muted-foreground" />}
-                  </div>
-                  <div className="flex gap-3 text-sm text-muted-foreground">
-                    <span>{formatBytes(file.size_bytes)}</span>
-                    <span>•</span>
-                    <span>{format(new Date(file.created_at), 'MMM d, yyyy')}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onPreview(file.id)}>
-                  <Eye className="h-4 w-4 mr-2" />
-                  Preview
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onDownload(file.id)}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onShare(file.id)}>
-                  <Share2 className="h-4 w-4 mr-2" />
-                  Share
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onRename(file.id)}>
-                  <Edit2 className="h-4 w-4 mr-2" />
-                  Rename
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onVersionHistory(file.id)}>
-                  <Clock className="h-4 w-4 mr-2" />
-                  Version History
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onEncrypt(file.id)}>
-                  <Lock className="h-4 w-4 mr-2" />
-                  {file.is_encrypted ? 'Decrypt' : 'Encrypt'}
-                </DropdownMenuItem>
-                {isArchiveFile(file.name) && onExtractZip && (
-                  <DropdownMenuItem onClick={() => onExtractZip(file.id)}>
-                    <Archive className="h-4 w-4 mr-2" />
-                    Extract Archive
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem 
-                  onClick={() => onDelete(file.id)}
-                  className="text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Move to Trash
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        );
-      })}
+            file={file}
+            isSelected={selectedFiles.includes(file.id)}
+            onSelectFile={onSelectFile}
+            onDownload={onDownload}
+            onShare={onShare}
+            onDelete={onDelete}
+            onRename={onRename}
+            onPreview={onPreview}
+            onEncrypt={onEncrypt}
+            onVersionHistory={onVersionHistory}
+            onExtractZip={onExtractZip}
+            onToggleFavorite={onToggleFavorite}
+          />
+        ))}
+      </div>
     </div>
   );
-};
+});
+
+FileList.displayName = 'FileList';
