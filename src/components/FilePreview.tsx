@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, X } from 'lucide-react';
+import { Download, X, Maximize2, Minimize2 } from 'lucide-react';
 import { CodeEditor } from './CodeEditor';
 import { NotebookViewer } from './NotebookViewer';
+import { cn } from '@/lib/utils';
 
 interface FilePreviewProps {
   file: {
@@ -18,7 +19,46 @@ interface FilePreviewProps {
   onDownload: () => void;
 }
 
-export const FilePreview = ({ file, downloadUrl, open, onClose, onDownload }: FilePreviewProps) => {
+const TextPreview = memo(({ url }: { url: string }) => {
+  const [content, setContent] = useState<string>('Loading...');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetch(url)
+      .then(res => res.text())
+      .then(text => {
+        setContent(text.substring(0, 100000));
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setContent('Error loading file');
+        setIsLoading(false);
+      });
+  }, [url]);
+
+  return (
+    <div className="relative">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      )}
+      <pre className={cn(
+        "p-4 bg-muted rounded-lg overflow-auto max-h-[70vh] text-sm whitespace-pre-wrap font-mono transition-opacity duration-300",
+        isLoading && "opacity-50"
+      )}>
+        {content}
+      </pre>
+    </div>
+  );
+});
+
+TextPreview.displayName = 'TextPreview';
+
+export const FilePreview = memo(({ file, downloadUrl, open, onClose, onDownload }: FilePreviewProps) => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   if (!file || !downloadUrl) return null;
 
   const getFileType = () => {
@@ -42,12 +82,29 @@ export const FilePreview = ({ file, downloadUrl, open, onClose, onDownload }: Fi
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="truncate pr-8">{file.name}</DialogTitle>
-            <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={onDownload}>
+      <DialogContent className={cn(
+        "flex flex-col overflow-hidden transition-all duration-300",
+        isFullscreen 
+          ? "max-w-[95vw] max-h-[95vh] w-[95vw] h-[95vh]" 
+          : "max-w-5xl max-h-[90vh]"
+      )}>
+        <DialogHeader className="shrink-0">
+          <div className="flex items-center justify-between gap-4">
+            <DialogTitle className="truncate pr-4 text-lg">{file.name}</DialogTitle>
+            <div className="flex gap-2 shrink-0">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="hover:bg-primary/10"
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="h-4 w-4" />
+                ) : (
+                  <Maximize2 className="h-4 w-4" />
+                )}
+              </Button>
+              <Button variant="outline" size="icon" onClick={onDownload} className="hover:bg-primary/10">
                 <Download className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" onClick={onClose}>
@@ -58,45 +115,66 @@ export const FilePreview = ({ file, downloadUrl, open, onClose, onDownload }: Fi
           <DialogDescription className="sr-only">Preview of {file.name}</DialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto animate-fade-in">
           {fileType === 'image' && (
-            <img src={downloadUrl} alt={file.name} className="w-full h-auto" />
+            <div className="flex items-center justify-center min-h-[300px] bg-muted/30 rounded-lg">
+              <img 
+                src={downloadUrl} 
+                alt={file.name} 
+                className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg transition-transform duration-300 hover:scale-[1.02]" 
+              />
+            </div>
           )}
           
           {fileType === 'video' && (
-            <video controls className="w-full h-auto max-h-[70vh]">
-              <source src={downloadUrl} type={file.mime_type || undefined} />
-              Your browser does not support video playback.
-            </video>
+            <div className="bg-muted/30 rounded-lg p-2">
+              <video controls className="w-full h-auto max-h-[70vh] rounded-lg shadow-lg">
+                <source src={downloadUrl} type={file.mime_type || undefined} />
+                Your browser does not support video playback.
+              </video>
+            </div>
           )}
           
           {fileType === 'audio' && (
-            <div className="flex items-center justify-center p-8">
-              <audio controls className="w-full max-w-2xl">
-                <source src={downloadUrl} type={file.mime_type || undefined} />
-                Your browser does not support audio playback.
-              </audio>
+            <div className="flex items-center justify-center p-8 bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg min-h-[200px]">
+              <div className="w-full max-w-2xl space-y-4">
+                <div className="flex items-center justify-center">
+                  <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
+                    <div className="w-16 h-16 rounded-full bg-primary/30 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-full bg-primary" />
+                    </div>
+                  </div>
+                </div>
+                <audio controls className="w-full">
+                  <source src={downloadUrl} type={file.mime_type || undefined} />
+                  Your browser does not support audio playback.
+                </audio>
+              </div>
             </div>
           )}
           
           {fileType === 'pdf' && (
             <iframe
               src={downloadUrl}
-              className="w-full h-[70vh] border-0"
+              className="w-full h-[70vh] border-0 rounded-lg shadow-lg"
               title={file.name}
             />
           )}
           
           {fileType === 'code' && (
-            <CodeEditor 
-              fileUrl={downloadUrl} 
-              fileName={file.name}
-              language={ext}
-            />
+            <div className="rounded-lg overflow-hidden border shadow-sm">
+              <CodeEditor 
+                fileUrl={downloadUrl} 
+                fileName={file.name}
+                language={ext}
+              />
+            </div>
           )}
           
           {fileType === 'notebook' && (
-            <NotebookViewer fileUrl={downloadUrl} />
+            <div className="rounded-lg overflow-hidden border shadow-sm">
+              <NotebookViewer fileUrl={downloadUrl} />
+            </div>
           )}
           
           {fileType === 'text' && (
@@ -104,20 +182,28 @@ export const FilePreview = ({ file, downloadUrl, open, onClose, onDownload }: Fi
           )}
 
           {fileType === 'archive' && (
-            <div className="flex flex-col items-center justify-center p-12 text-center">
-              <p className="text-muted-foreground mb-4">This is an archive file. Download to extract or use batch actions.</p>
-              <Button onClick={onDownload}>
-                <Download className="h-4 w-4 mr-2" />
+            <div className="flex flex-col items-center justify-center p-12 text-center bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg">
+              <div className="p-4 rounded-full bg-primary/10 mb-4">
+                <Download className="h-8 w-8 text-primary" />
+              </div>
+              <p className="text-muted-foreground mb-4 max-w-md">
+                This is an archive file. Download to extract contents or use the Extract option from the file menu.
+              </p>
+              <Button onClick={onDownload} className="gap-2">
+                <Download className="h-4 w-4" />
                 Download Archive
               </Button>
             </div>
           )}
           
           {fileType === 'unknown' && (
-            <div className="flex flex-col items-center justify-center p-12 text-center">
+            <div className="flex flex-col items-center justify-center p-12 text-center bg-muted/30 rounded-lg">
+              <div className="p-4 rounded-full bg-muted mb-4">
+                <Download className="h-8 w-8 text-muted-foreground" />
+              </div>
               <p className="text-muted-foreground mb-4">Preview not available for this file type</p>
-              <Button onClick={onDownload}>
-                <Download className="h-4 w-4 mr-2" />
+              <Button onClick={onDownload} variant="outline" className="gap-2">
+                <Download className="h-4 w-4" />
                 Download to view
               </Button>
             </div>
@@ -126,22 +212,6 @@ export const FilePreview = ({ file, downloadUrl, open, onClose, onDownload }: Fi
       </DialogContent>
     </Dialog>
   );
-};
+});
 
-const TextPreview = ({ url }: { url: string }) => {
-  const [content, setContent] = useState<string>('Loading...');
-
-  // Fixed: Use useEffect instead of useState for side effects
-  useState(() => {
-    fetch(url)
-      .then(res => res.text())
-      .then(text => setContent(text.substring(0, 100000))) // Limit to 100KB for performance
-      .catch(() => setContent('Error loading file'));
-  });
-
-  return (
-    <pre className="p-4 bg-muted rounded-lg overflow-auto max-h-[70vh] text-sm whitespace-pre-wrap">
-      {content}
-    </pre>
-  );
-};
+FilePreview.displayName = 'FilePreview';

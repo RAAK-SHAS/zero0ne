@@ -705,11 +705,12 @@ export const ArchiveManager = ({
               setCreateDialogOpen(true);
             }}
             disabled={isProcessing}
+            className="gap-2 transition-all hover:shadow-md"
           >
             {isProcessing ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <ArchiveIcon className="h-4 w-4 mr-2" />
+              <ArchiveIcon className="h-4 w-4" />
             )}
             Create Archive
           </Button>
@@ -718,113 +719,150 @@ export const ArchiveManager = ({
 
       {/* Preview Dialog */}
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FolderOpen className="h-5 w-5" />
-              {currentArchive?.name}
-              {isEncrypted && <Lock className="h-4 w-4 text-muted-foreground" />}
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="shrink-0 pb-4 border-b">
+            <DialogTitle className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <FolderOpen className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{currentArchive?.name}</p>
+                <p className="text-sm text-muted-foreground font-normal">
+                  {formatBytes(currentArchive?.size_bytes || 0)}
+                </p>
+              </div>
+              {isEncrypted && (
+                <div className="p-1.5 rounded-full bg-yellow-500/10">
+                  <Lock className="h-4 w-4 text-yellow-500" />
+                </div>
+              )}
             </DialogTitle>
           </DialogHeader>
 
           {isProcessing && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-2">Loading archive...</span>
+            <div className="flex-1 flex flex-col items-center justify-center py-12 gap-4">
+              <div className="relative">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <div className="absolute inset-0 h-12 w-12 animate-ping rounded-full bg-primary/20" />
+              </div>
+              <p className="text-muted-foreground animate-pulse">Loading archive contents...</p>
             </div>
           )}
 
           {needsPassword && !isProcessing && (
-            <div className="space-y-4 py-4">
-              <div className="flex items-center gap-2 text-warning">
-                <Lock className="h-5 w-5" />
-                <span>This archive is password protected</span>
+            <div className="flex-1 flex flex-col items-center justify-center py-8 gap-6">
+              <div className="p-4 rounded-full bg-yellow-500/10">
+                <Lock className="h-8 w-8 text-yellow-500" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="archive-password">Enter Password</Label>
-                <Input
-                  id="archive-password"
-                  type="password"
-                  value={archivePassword}
-                  onChange={(e) => setArchivePassword(e.target.value)}
-                  placeholder="Archive password"
-                />
+              <div className="text-center space-y-2">
+                <h3 className="font-semibold">Password Protected</h3>
+                <p className="text-sm text-muted-foreground">
+                  This archive requires a password to view contents
+                </p>
               </div>
-              <Button onClick={handlePasswordSubmit} disabled={!archivePassword}>
-                <Lock className="h-4 w-4 mr-2" />
-                Unlock Archive
-              </Button>
+              <div className="w-full max-w-xs space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="archive-password">Password</Label>
+                  <Input
+                    id="archive-password"
+                    type="password"
+                    value={archivePassword}
+                    onChange={(e) => setArchivePassword(e.target.value)}
+                    placeholder="Enter archive password"
+                    className="text-center"
+                    onKeyDown={(e) => e.key === 'Enter' && archivePassword && handlePasswordSubmit()}
+                  />
+                </div>
+                <Button 
+                  onClick={handlePasswordSubmit} 
+                  disabled={!archivePassword}
+                  className="w-full gap-2"
+                >
+                  <Lock className="h-4 w-4" />
+                  Unlock Archive
+                </Button>
+              </div>
             </div>
           )}
 
           {!isProcessing && !needsPassword && previewFiles.length > 0 && (
             <>
-              <div className="flex items-center justify-between pb-2 border-b">
-                <div className="text-sm text-muted-foreground">
-                  {previewFiles.filter(f => !f.isDirectory).length} files
-                  {selectedFiles.size > 0 && ` (${selectedFiles.size} selected)`}
+              <div className="flex items-center justify-between py-3 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="text-sm">
+                    <span className="font-medium">{previewFiles.filter(f => !f.isDirectory).length}</span>
+                    <span className="text-muted-foreground"> files</span>
+                  </div>
+                  {selectedFiles.size > 0 && (
+                    <div className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                      {selectedFiles.size} selected
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={selectAll}>
+                  <Button variant="ghost" size="sm" onClick={selectAll} className="text-xs">
                     Select All
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={deselectAll}>
-                    Deselect All
+                  <Button variant="ghost" size="sm" onClick={deselectAll} className="text-xs">
+                    Clear
                   </Button>
                 </div>
               </div>
 
-              <ScrollArea className="h-[40vh]">
-                <div className="space-y-1 pr-4">
+              <ScrollArea className="flex-1 min-h-0 -mx-2">
+                <div className="space-y-1 px-2">
                   {previewFiles.map((file, idx) => (
                     <div
                       key={idx}
-                      className={`flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 ${
-                        !file.extractable ? 'opacity-50' : ''
-                      }`}
+                      className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-200 hover:bg-muted/50 ${
+                        selectedFiles.has(file.path) ? 'bg-primary/5 border border-primary/20' : 'border border-transparent'
+                      } ${!file.extractable ? 'opacity-50' : ''}`}
                     >
                       {!file.isDirectory && (
                         <Checkbox
                           checked={selectedFiles.has(file.path)}
                           onCheckedChange={() => toggleFileSelection(file.path)}
                           disabled={!file.extractable}
+                          className="shrink-0"
                         />
                       )}
-                      {file.isDirectory ? (
-                        <Folder className="h-4 w-4 text-primary" />
-                      ) : (
-                        <FileIcon className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <span className="flex-1 truncate text-sm">{file.path}</span>
+                      <div className={`shrink-0 p-1.5 rounded ${file.isDirectory ? 'bg-primary/10' : 'bg-muted'}`}>
+                        {file.isDirectory ? (
+                          <Folder className="h-4 w-4 text-primary" />
+                        ) : (
+                          <FileIcon className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <span className="flex-1 truncate text-sm font-medium">{file.path}</span>
                       {!file.isDirectory && (
-                        <>
-                          <span className="text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-muted-foreground tabular-nums">
                             {formatBytes(file.size)}
                           </span>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6"
+                            className="h-7 w-7 hover:bg-primary/10"
                             onClick={() => downloadSingleFile(file)}
                           >
-                            <Download className="h-3 w-3" />
+                            <Download className="h-3.5 w-3.5" />
                           </Button>
-                        </>
+                        </div>
                       )}
                       {!file.extractable && (
-                        <AlertCircle className="h-4 w-4 text-destructive" />
+                        <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
                       )}
                     </div>
                   ))}
                 </div>
               </ScrollArea>
 
-              <DialogFooter>
+              <DialogFooter className="pt-4 border-t shrink-0">
                 <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={extractSelectedFiles}>
-                  <FolderOpen className="h-4 w-4 mr-2" />
+                <Button onClick={extractSelectedFiles} className="gap-2">
+                  <FolderOpen className="h-4 w-4" />
                   Extract {selectedFiles.size > 0 ? `${selectedFiles.size} Files` : 'All'}
                 </Button>
               </DialogFooter>
@@ -837,32 +875,37 @@ export const ArchiveManager = ({
       <Dialog open={extractDialogOpen} onOpenChange={setExtractDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FolderOpen className="h-5 w-5" />
-              Extracting Files
+            <DialogTitle className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${isProcessing ? 'bg-primary/10' : 'bg-green-500/10'}`}>
+                <FolderOpen className={`h-5 w-5 ${isProcessing ? 'text-primary' : 'text-green-500'}`} />
+              </div>
+              {isProcessing ? 'Extracting Files' : 'Extraction Complete'}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 py-2">
             {isProcessing && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span>Extracting...</span>
-                  <span>{Math.round(progress)}%</span>
+                  <span className="text-muted-foreground">Progress</span>
+                  <span className="font-medium tabular-nums">{Math.round(progress)}%</span>
                 </div>
-                <Progress value={progress} />
+                <Progress value={progress} className="h-2" />
               </div>
             )}
 
             {extractedFiles.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Extracted Files:</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Extracted Files</p>
+                  <span className="text-xs text-muted-foreground">{extractedFiles.length} files</span>
+                </div>
                 <ScrollArea className="max-h-48">
                   <div className="space-y-1">
                     {extractedFiles.map((f, i) => (
-                      <div key={i} className="flex justify-between text-sm p-2 bg-muted rounded">
-                        <span className="truncate flex-1">{f.name}</span>
-                        <span className="text-muted-foreground ml-2">{formatBytes(f.size)}</span>
+                      <div key={i} className="flex justify-between text-sm p-2.5 bg-muted/50 rounded-lg">
+                        <span className="truncate flex-1 font-medium">{f.name}</span>
+                        <span className="text-muted-foreground ml-2 tabular-nums">{formatBytes(f.size)}</span>
                       </div>
                     ))}
                   </div>
@@ -874,8 +917,9 @@ export const ArchiveManager = ({
               onClick={() => setExtractDialogOpen(false)} 
               className="w-full"
               disabled={isProcessing}
+              variant={isProcessing ? 'outline' : 'default'}
             >
-              {isProcessing ? 'Processing...' : 'Close'}
+              {isProcessing ? 'Processing...' : 'Done'}
             </Button>
           </div>
         </DialogContent>
@@ -885,16 +929,19 @@ export const ArchiveManager = ({
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ArchiveIcon className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <ArchiveIcon className="h-5 w-5 text-primary" />
+              </div>
               Create Archive
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Create an archive from {files.length} selected file(s)
-            </p>
+          <div className="space-y-4 py-2">
+            <div className="p-3 rounded-lg bg-muted/50 text-sm">
+              <span className="font-medium">{files.length}</span>
+              <span className="text-muted-foreground"> file{files.length !== 1 ? 's' : ''} will be compressed</span>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="create-password">Password Protection (Optional)</Label>
@@ -906,17 +953,17 @@ export const ArchiveManager = ({
                 placeholder="Leave empty for no password"
               />
               <p className="text-xs text-muted-foreground">
-                Note: Password protection works with TAR.GZ format
+                Password protection is available with TAR.GZ format
               </p>
             </div>
 
             {isProcessing && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span>Creating archive...</span>
-                  <span>{Math.round(progress)}%</span>
+                  <span className="text-muted-foreground">Creating archive...</span>
+                  <span className="font-medium tabular-nums">{Math.round(progress)}%</span>
                 </div>
-                <Progress value={progress} />
+                <Progress value={progress} className="h-2" />
               </div>
             )}
           </div>
@@ -928,11 +975,12 @@ export const ArchiveManager = ({
             <Button 
               onClick={() => createArchive(files, createPassword ? 'tar.gz' : 'zip')}
               disabled={isProcessing}
+              className="gap-2"
             >
               {isProcessing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <ArchiveIcon className="h-4 w-4 mr-2" />
+                <ArchiveIcon className="h-4 w-4" />
               )}
               {createPassword ? 'Create TAR.GZ' : 'Create ZIP'}
             </Button>
@@ -1305,95 +1353,134 @@ export const ArchivePreviewWrapper = ({
   return (
     <>
       <Dialog open={previewDialogOpen} onOpenChange={(open) => !open && handleClose()}>
-        <DialogContent className="max-w-2xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FolderOpen className="h-5 w-5" />
-              {file.name}
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="shrink-0 pb-4 border-b">
+            <DialogTitle className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <FolderOpen className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{file.name}</p>
+                <p className="text-sm text-muted-foreground font-normal">
+                  {formatBytes(file.size_bytes)}
+                </p>
+              </div>
             </DialogTitle>
           </DialogHeader>
 
           {isProcessing && !extractDialogOpen && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-2">Loading archive...</span>
+            <div className="flex-1 flex flex-col items-center justify-center py-12 gap-4">
+              <div className="relative">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <div className="absolute inset-0 h-12 w-12 animate-ping rounded-full bg-primary/20" />
+              </div>
+              <p className="text-muted-foreground animate-pulse">Loading archive contents...</p>
             </div>
           )}
 
           {needsPassword && !isProcessing && (
-            <div className="space-y-4 py-4">
-              <div className="flex items-center gap-2 text-warning">
-                <Lock className="h-5 w-5" />
-                <span>Password protected archive</span>
+            <div className="flex-1 flex flex-col items-center justify-center py-8 gap-6">
+              <div className="p-4 rounded-full bg-yellow-500/10">
+                <Lock className="h-8 w-8 text-yellow-500" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="archive-password">Enter Password</Label>
-                <Input
-                  id="archive-password"
-                  type="password"
-                  value={archivePassword}
-                  onChange={(e) => setArchivePassword(e.target.value)}
-                  placeholder="Archive password"
-                />
+              <div className="text-center space-y-2">
+                <h3 className="font-semibold">Password Protected</h3>
+                <p className="text-sm text-muted-foreground">
+                  This archive requires a password to view contents
+                </p>
               </div>
-              <Button onClick={handlePasswordSubmit} disabled={!archivePassword}>
-                <Lock className="h-4 w-4 mr-2" />
-                Unlock
-              </Button>
+              <div className="w-full max-w-xs space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="archive-password">Password</Label>
+                  <Input
+                    id="archive-password"
+                    type="password"
+                    value={archivePassword}
+                    onChange={(e) => setArchivePassword(e.target.value)}
+                    placeholder="Enter archive password"
+                    className="text-center"
+                    onKeyDown={(e) => e.key === 'Enter' && archivePassword && handlePasswordSubmit()}
+                  />
+                </div>
+                <Button 
+                  onClick={handlePasswordSubmit} 
+                  disabled={!archivePassword}
+                  className="w-full gap-2"
+                >
+                  <Lock className="h-4 w-4" />
+                  Unlock Archive
+                </Button>
+              </div>
             </div>
           )}
 
           {!isProcessing && !needsPassword && previewFiles.length > 0 && (
             <>
-              <div className="flex items-center justify-between pb-2 border-b">
-                <div className="text-sm text-muted-foreground">
-                  {previewFiles.filter(f => !f.isDirectory).length} files
-                  {selectedFiles.size > 0 && ` (${selectedFiles.size} selected)`}
+              <div className="flex items-center justify-between py-3 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="text-sm">
+                    <span className="font-medium">{previewFiles.filter(f => !f.isDirectory).length}</span>
+                    <span className="text-muted-foreground"> files</span>
+                  </div>
+                  {selectedFiles.size > 0 && (
+                    <div className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                      {selectedFiles.size} selected
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={selectAll}>Select All</Button>
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedFiles(new Set())}>Deselect</Button>
+                  <Button variant="ghost" size="sm" onClick={selectAll} className="text-xs">
+                    Select All
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedFiles(new Set())} className="text-xs">
+                    Clear
+                  </Button>
                 </div>
               </div>
 
-              <ScrollArea className="h-[40vh]">
-                <div className="space-y-1 pr-4">
+              <ScrollArea className="flex-1 min-h-0 -mx-2">
+                <div className="space-y-1 px-2">
                   {previewFiles.map((f, idx) => (
                     <div
                       key={idx}
-                      className={`flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 ${!f.extractable ? 'opacity-50' : ''}`}
+                      className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-200 hover:bg-muted/50 ${
+                        selectedFiles.has(f.path) ? 'bg-primary/5 border border-primary/20' : 'border border-transparent'
+                      } ${!f.extractable ? 'opacity-50' : ''}`}
                     >
                       {!f.isDirectory && (
                         <Checkbox
                           checked={selectedFiles.has(f.path)}
                           onCheckedChange={() => toggleFileSelection(f.path)}
                           disabled={!f.extractable}
+                          className="shrink-0"
                         />
                       )}
-                      {f.isDirectory ? (
-                        <Folder className="h-4 w-4 text-primary" />
-                      ) : (
-                        <FileIcon className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <span className="flex-1 truncate text-sm">{f.path}</span>
+                      <div className={`shrink-0 p-1.5 rounded ${f.isDirectory ? 'bg-primary/10' : 'bg-muted'}`}>
+                        {f.isDirectory ? (
+                          <Folder className="h-4 w-4 text-primary" />
+                        ) : (
+                          <FileIcon className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <span className="flex-1 truncate text-sm font-medium">{f.path}</span>
                       {!f.isDirectory && (
-                        <>
-                          <span className="text-xs text-muted-foreground">{formatBytes(f.size)}</span>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => downloadSingleFile(f)}>
-                            <Download className="h-3 w-3" />
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-muted-foreground tabular-nums">{formatBytes(f.size)}</span>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10" onClick={() => downloadSingleFile(f)}>
+                            <Download className="h-3.5 w-3.5" />
                           </Button>
-                        </>
+                        </div>
                       )}
-                      {!f.extractable && <AlertCircle className="h-4 w-4 text-destructive" />}
+                      {!f.extractable && <AlertCircle className="h-4 w-4 text-destructive shrink-0" />}
                     </div>
                   ))}
                 </div>
               </ScrollArea>
 
-              <DialogFooter>
+              <DialogFooter className="pt-4 border-t shrink-0">
                 <Button variant="outline" onClick={handleClose}>Cancel</Button>
-                <Button onClick={extractSelectedFiles}>
-                  <FolderOpen className="h-4 w-4 mr-2" />
+                <Button onClick={extractSelectedFiles} className="gap-2">
+                  <FolderOpen className="h-4 w-4" />
                   Extract {selectedFiles.size > 0 ? `${selectedFiles.size} Files` : 'All'}
                 </Button>
               </DialogFooter>
@@ -1405,35 +1492,48 @@ export const ArchivePreviewWrapper = ({
       <Dialog open={extractDialogOpen} onOpenChange={setExtractDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Extracting Files</DialogTitle>
+            <DialogTitle className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${isProcessing ? 'bg-primary/10' : 'bg-green-500/10'}`}>
+                <FolderOpen className={`h-5 w-5 ${isProcessing ? 'text-primary' : 'text-green-500'}`} />
+              </div>
+              {isProcessing ? 'Extracting Files' : 'Extraction Complete'}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 py-2">
             {isProcessing && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span>Extracting...</span>
-                  <span>{Math.round(progress)}%</span>
+                  <span className="text-muted-foreground">Progress</span>
+                  <span className="font-medium tabular-nums">{Math.round(progress)}%</span>
                 </div>
-                <Progress value={progress} />
+                <Progress value={progress} className="h-2" />
               </div>
             )}
             {extractedFiles.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Extracted:</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Extracted Files</p>
+                  <span className="text-xs text-muted-foreground">{extractedFiles.length} files</span>
+                </div>
                 <ScrollArea className="max-h-48">
                   <div className="space-y-1">
                     {extractedFiles.map((f, i) => (
-                      <div key={i} className="flex justify-between text-sm p-2 bg-muted rounded">
-                        <span className="truncate flex-1">{f.name}</span>
-                        <span className="text-muted-foreground ml-2">{formatBytes(f.size)}</span>
+                      <div key={i} className="flex justify-between text-sm p-2.5 bg-muted/50 rounded-lg">
+                        <span className="truncate flex-1 font-medium">{f.name}</span>
+                        <span className="text-muted-foreground ml-2 tabular-nums">{formatBytes(f.size)}</span>
                       </div>
                     ))}
                   </div>
                 </ScrollArea>
               </div>
             )}
-            <Button onClick={() => { setExtractDialogOpen(false); handleClose(); }} className="w-full" disabled={isProcessing}>
-              {isProcessing ? 'Processing...' : 'Close'}
+            <Button 
+              onClick={() => { setExtractDialogOpen(false); handleClose(); }} 
+              className="w-full" 
+              disabled={isProcessing}
+              variant={isProcessing ? 'outline' : 'default'}
+            >
+              {isProcessing ? 'Processing...' : 'Done'}
             </Button>
           </div>
         </DialogContent>
