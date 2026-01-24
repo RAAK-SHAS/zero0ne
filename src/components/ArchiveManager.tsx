@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Archive, ArchiveCompression, ArchiveFormat } from 'libarchive.js';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -1016,9 +1016,10 @@ export const ArchivePreviewWrapper = ({
   };
 
   // Load archive on mount
-  useState(() => {
+  useEffect(() => {
     loadArchive();
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadArchive = async () => {
     setIsProcessing(true);
