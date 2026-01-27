@@ -68,7 +68,8 @@ export const FilePreview = memo(({ file, downloadUrl, open, onClose, onDownload 
     if (mimeType.startsWith('image/')) return 'image';
     if (mimeType.startsWith('video/')) return 'video';
     if (mimeType.startsWith('audio/')) return 'audio';
-    if (mimeType.includes('pdf')) return 'pdf';
+    if (mimeType.includes('pdf') || ext === 'pdf') return 'pdf';
+    if (['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'].includes(ext)) return 'office';
     if (ext === 'ipynb') return 'notebook';
     if (mimeType.includes('text') || ['txt', 'md', 'json', 'xml', 'csv', 'yaml', 'yml', 'log', 'ini', 'conf', 'env'].includes(ext)) return 'text';
     if (['js', 'ts', 'tsx', 'jsx', 'py', 'java', 'cpp', 'c', 'h', 'hpp', 'cs', 'go', 'rs', 'rb', 'php', 'swift', 'kt', 'scala', 'html', 'css', 'scss', 'sass', 'less', 'sql', 'sh', 'bash', 'zsh', 'ps1', 'r', 'lua', 'perl', 'dart', 'vue', 'svelte'].includes(ext)) return 'code';
@@ -155,7 +156,15 @@ export const FilePreview = memo(({ file, downloadUrl, open, onClose, onDownload 
           
           {fileType === 'pdf' && (
             <iframe
-              src={downloadUrl}
+              src={`${downloadUrl}#toolbar=1&navpanes=1&scrollbar=1`}
+              className="w-full h-[70vh] border-0 rounded-lg shadow-lg"
+              title={file.name}
+            />
+          )}
+          
+          {fileType === 'office' && (
+            <iframe
+              src={`https://docs.google.com/gview?url=${encodeURIComponent(downloadUrl)}&embedded=true`}
               className="w-full h-[70vh] border-0 rounded-lg shadow-lg"
               title={file.name}
             />
