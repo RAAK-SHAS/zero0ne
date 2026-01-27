@@ -251,7 +251,9 @@ const Dashboard = () => {
 
       const { data, error } = await supabase.storage
         .from('user-files')
-        .createSignedUrl(file.storage_path, 3600);
+        .createSignedUrl(file.storage_path, 3600, {
+          download: false, // Use inline disposition for preview instead of attachment
+        });
 
       if (error) throw error;
       
