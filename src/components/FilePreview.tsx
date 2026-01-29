@@ -154,20 +154,24 @@ export const FilePreview = memo(({ file, downloadUrl, open, onClose, onDownload 
             </div>
           )}
           
-          {fileType === 'pdf' && (
-            <iframe
-              src={`https://docs.google.com/gview?url=${encodeURIComponent(downloadUrl)}&embedded=true`}
-              className="w-full h-[70vh] border-0 rounded-lg shadow-lg"
-              title={file.name}
-            />
-          )}
-          
-          {fileType === 'office' && (
-            <iframe
-              src={`https://docs.google.com/gview?url=${encodeURIComponent(downloadUrl)}&embedded=true`}
-              className="w-full h-[70vh] border-0 rounded-lg shadow-lg"
-              title={file.name}
-            />
+          {(fileType === 'pdf' || fileType === 'office') && (
+            <div className="relative w-full h-[70vh]">
+              <div className="absolute inset-0 flex items-center justify-center bg-muted/50 rounded-lg z-10 pointer-events-none document-loader">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+                  <p className="text-sm text-muted-foreground">Loading document...</p>
+                </div>
+              </div>
+              <iframe
+                src={`https://docs.google.com/gview?url=${encodeURIComponent(downloadUrl)}&embedded=true`}
+                className="w-full h-full border-0 rounded-lg shadow-lg relative z-20"
+                title={file.name}
+                onLoad={(e) => {
+                  const loader = e.currentTarget.parentElement?.querySelector('.document-loader');
+                  if (loader) loader.classList.add('hidden');
+                }}
+              />
+            </div>
           )}
           
           {fileType === 'code' && (
