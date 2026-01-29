@@ -156,7 +156,7 @@ export const FilePreview = memo(({ file, downloadUrl, open, onClose, onDownload 
           
           {fileType === 'pdf' && (
             <iframe
-              src={`${downloadUrl}#toolbar=1&navpanes=1&scrollbar=1`}
+              src={`https://docs.google.com/gview?url=${encodeURIComponent(downloadUrl)}&embedded=true`}
               className="w-full h-[70vh] border-0 rounded-lg shadow-lg"
               title={file.name}
             />
