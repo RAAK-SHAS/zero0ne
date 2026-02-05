@@ -6,6 +6,8 @@ import * as tus from 'tus-js-client';
 const DB_NAME = 'CloudStoreUploads';
 const STORE_NAME = 'uploads';
 const TUS_CHUNK_SIZE = 6 * 1024 * 1024; // 6MB chunks for TUS
+const MAX_RETRIES = 10; // More retries for large files
+const TOKEN_REFRESH_INTERVAL = 30 * 60 * 1000; // Refresh token every 30 minutes
 
 export interface UploadItem {
   id: string;
@@ -87,6 +89,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const uploadQueue = useRef<string[]>([]);
   const currentUserId = useRef<string>('');
   const processingRef = useRef(false);
+  const tokenRefreshTimer = useRef<NodeJS.Timeout | null>(null);
+  const lastTokenRefresh = useRef<number>(0);
 
   useEffect(() => {
     uploadsRef.current = uploads;
@@ -95,6 +99,45 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     throttleRateRef.current = throttleRate;
   }, [throttleRate]);
+
+  // Cleanup token refresh timer on unmount
+  useEffect(() => {
+    return () => {
+      if (tokenRefreshTimer.current) {
+        clearInterval(tokenRefreshTimer.current);
+        tokenRefreshTimer.current = null;
+      }
+    };
+  }, []);
+
+  // Token refresh for long uploads
+  const refreshAuthToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) throw error;
+      lastTokenRefresh.current = Date.now();
+      return data.session?.access_token || null;
+    } catch (error) {
+      console.error('Failed to refresh token:', error);
+      return null;
+    }
+  }, []);
+
+  // Ensure fresh token for large uploads
+  const getValidToken = useCallback(async (): Promise<string | null> => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    
+    if (!token) return null;
+    
+    // Refresh if token is older than 30 minutes
+    if (Date.now() - lastTokenRefresh.current > TOKEN_REFRESH_INTERVAL) {
+      const newToken = await refreshAuthToken();
+      return newToken || token;
+    }
+    
+    return token;
+  }, [refreshAuthToken]);
 
   const openDB = useCallback((): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
@@ -199,8 +242,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     await saveUploadState(state);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
+      const accessToken = await getValidToken();
       
       if (!accessToken) {
         throw new Error('Not authenticated');
@@ -211,7 +253,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
       const tusUpload = new tus.Upload(file, {
         endpoint: `https://${projectId}.supabase.co/storage/v1/upload/resumable`,
-        retryDelays: [0, 3000, 5000, 10000, 20000],
+        retryDelays: [0, 1000, 3000, 5000, 10000, 20000, 30000, 60000, 120000, 300000], // More retries with longer delays for large files
         headers: {
           authorization: `Bearer ${accessToken}`,
           apikey: anonKey,
@@ -219,6 +261,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         uploadDataDuringCreation: true,
         removeFingerprintOnSuccess: true,
         chunkSize: TUS_CHUNK_SIZE,
+        parallelUploads: 1, // Keep at 1 for stability with large files
         metadata: {
           bucketName: 'user-files',
           objectName: state.storagePath,
@@ -227,6 +270,22 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onError: async (error) => {
           console.error('TUS upload error:', error);
+          
+          // Check if it's a token expiry issue and retry
+          if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
+            console.log('Token may have expired, refreshing...');
+            const newToken = await refreshAuthToken();
+            if (newToken && tusUploads.current[uploadId]) {
+              // Update headers with new token and retry
+              tusUpload.options.headers = {
+                ...tusUpload.options.headers,
+                authorization: `Bearer ${newToken}`,
+              };
+              tusUpload.start();
+              return;
+            }
+          }
+          
           if (!pausedUploads.current.has(uploadId)) {
             state.status = 'error';
             state.error = error.message || 'Upload failed';
@@ -245,6 +304,14 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           state.progress = Math.round((bytesUploaded / bytesTotal) * 100);
           state.speed = calculateSpeed(uploadId, bytesUploaded);
           state.eta = state.speed > 0 ? (bytesTotal - bytesUploaded) / state.speed : 0;
+          
+          // Save progress periodically for resume capability
+          const chunkNumber = Math.floor(bytesUploaded / TUS_CHUNK_SIZE);
+          if (!state.uploadedChunks.includes(chunkNumber)) {
+            state.uploadedChunks.push(chunkNumber);
+            saveUploadState(state);
+          }
+          
           setUploads(prev => ({ ...prev, [uploadId]: { ...state } }));
         },
         onSuccess: async () => {
@@ -291,6 +358,21 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       // Store for pause/resume
       tusUploads.current[uploadId] = tusUpload;
 
+      // Set up periodic token refresh for long uploads (every 25 minutes)
+      if (!tokenRefreshTimer.current) {
+        tokenRefreshTimer.current = setInterval(async () => {
+          const newToken = await refreshAuthToken();
+          if (newToken) {
+            // Update all active TUS uploads with new token
+            Object.values(tusUploads.current).forEach(upload => {
+              if (upload.options.headers) {
+                upload.options.headers.authorization = `Bearer ${newToken}`;
+              }
+            });
+          }
+        }, 25 * 60 * 1000);
+      }
+
       // Check for previous uploads to resume
       const previousUploads = await tusUpload.findPreviousUploads();
       if (previousUploads.length > 0) {
@@ -312,7 +394,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       processingRef.current = false;
       processNextInQueue();
     }
-  }, [saveUploadState, deleteUploadState]);
+  }, [saveUploadState, deleteUploadState, getValidToken, refreshAuthToken]);
 
   const addFiles = useCallback((files: File[], userId: string, folderPath?: string, folderId?: string) => {
     currentUserId.current = userId;
