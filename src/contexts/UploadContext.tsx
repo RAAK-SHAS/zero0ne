@@ -9,6 +9,13 @@ const TUS_CHUNK_SIZE = 6 * 1024 * 1024; // 6MB chunks for TUS
 const MAX_RETRIES = 10; // More retries for large files
 const TOKEN_REFRESH_INTERVAL = 30 * 60 * 1000; // Refresh token every 30 minutes
 
+export interface NetworkState {
+  isOnline: boolean;
+  retryCount: number;
+  lastRetryAt: number | null;
+  connectionQuality: 'good' | 'slow' | 'offline';
+}
+
 export interface UploadItem {
   id: string;
   fileName: string;
@@ -47,6 +54,7 @@ export interface UploadDiagnostics {
 interface UploadContextType {
   uploads: Record<string, UploadItem>;
   isUploading: boolean;
+  networkState: NetworkState;
   addFiles: (files: File[], userId: string, folderPath?: string, folderId?: string) => void;
   pauseUpload: (id: string) => void;
   resumeUpload: (id: string, file: File) => void;
@@ -81,9 +89,16 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const uploadsRef = useRef<Record<string, UploadItem>>({});
   const [isUploading, setIsUploading] = useState(false);
   const [throttleRate, setThrottleRate] = useState(0);
+  const [networkState, setNetworkState] = useState<NetworkState>({
+    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    retryCount: 0,
+    lastRetryAt: null,
+    connectionQuality: 'good',
+  });
   const throttleRateRef = useRef(0);
   const tusUploads = useRef<Record<string, tus.Upload>>({});
   const pausedUploads = useRef<Set<string>>(new Set());
+  const offlinePausedUploads = useRef<Set<string>>(new Set());
   const speedTracking = useRef<Record<string, { bytes: number; timestamp: number }[]>>({});
   const fileRefs = useRef<Record<string, File>>({});
   const uploadQueue = useRef<string[]>([]);
@@ -108,6 +123,104 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         tokenRefreshTimer.current = null;
       }
     };
+  }, []);
+
+  // Network monitoring with auto-resume
+  useEffect(() => {
+    const handleOnline = () => {
+      setNetworkState(prev => ({
+        ...prev,
+        isOnline: true,
+        connectionQuality: 'good',
+      }));
+      
+      toast.success('Connection restored! Resuming uploads...');
+      
+      // Auto-resume uploads that were paused due to offline
+      offlinePausedUploads.current.forEach(id => {
+        const upload = uploadsRef.current[id];
+        if (upload && upload.file && upload.status === 'paused') {
+          pausedUploads.current.delete(id);
+          
+          const next = { ...upload, status: 'queued' as const };
+          uploadsRef.current = { ...uploadsRef.current, [id]: next };
+          
+          setUploads(prev => ({
+            ...prev,
+            [id]: { ...prev[id], status: 'queued' }
+          }));
+          
+          uploadQueue.current.push(id);
+        }
+      });
+      
+      offlinePausedUploads.current.clear();
+      
+      // Trigger queue processing
+      if (uploadQueue.current.length > 0 && !processingRef.current) {
+        setTimeout(() => processNextInQueue(), 100);
+      }
+    };
+
+    const handleOffline = () => {
+      setNetworkState(prev => ({
+        ...prev,
+        isOnline: false,
+        connectionQuality: 'offline',
+      }));
+      
+      toast.warning('Connection lost. Uploads will resume automatically when online.');
+      
+      // Pause all active uploads and track them
+      Object.entries(uploadsRef.current).forEach(([id, upload]) => {
+        if (upload.status === 'uploading' || upload.status === 'queued') {
+          offlinePausedUploads.current.add(id);
+          
+          if (tusUploads.current[id]) {
+            tusUploads.current[id].abort();
+          }
+          
+          pausedUploads.current.add(id);
+          
+          const next = { ...upload, status: 'paused' as const };
+          uploadsRef.current = { ...uploadsRef.current, [id]: next };
+          
+          setUploads(prev => ({
+            ...prev,
+            [id]: { ...prev[id], status: 'paused' }
+          }));
+        }
+      });
+      
+      // Clear the processing queue
+      uploadQueue.current = [];
+      processingRef.current = false;
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Helper to increment retry count
+  const incrementRetryCount = useCallback(() => {
+    setNetworkState(prev => ({
+      ...prev,
+      retryCount: prev.retryCount + 1,
+      lastRetryAt: Date.now(),
+    }));
+  }, []);
+
+  const resetRetryCount = useCallback(() => {
+    setNetworkState(prev => ({
+      ...prev,
+      retryCount: 0,
+      lastRetryAt: null,
+    }));
   }, []);
 
   // Token refresh for long uploads
@@ -270,10 +383,33 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onError: async (error) => {
           console.error('TUS upload error:', error);
+          incrementRetryCount();
+          
+          // Check if it's an offline/network issue
+          if (!navigator.onLine) {
+            setNetworkState(prev => ({
+              ...prev,
+              isOnline: false,
+              connectionQuality: 'offline',
+            }));
+            // Will auto-resume when online again via the network listener
+            offlinePausedUploads.current.add(uploadId);
+            pausedUploads.current.add(uploadId);
+            state.status = 'paused';
+            state.error = 'Connection lost - will resume automatically';
+            setUploads(prev => ({ ...prev, [uploadId]: state }));
+            await saveUploadState(state);
+            toast.warning('Connection lost. Upload will resume when back online.');
+            delete tusUploads.current[uploadId];
+            uploadQueue.current.shift();
+            processingRef.current = false;
+            return;
+          }
           
           // Check if it's a token expiry issue and retry
           if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
             console.log('Token may have expired, refreshing...');
+            toast.info(`Refreshing auth token...`);
             const newToken = await refreshAuthToken();
             if (newToken && tusUploads.current[uploadId]) {
               // Update headers with new token and retry
@@ -315,6 +451,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           setUploads(prev => ({ ...prev, [uploadId]: { ...state } }));
         },
         onSuccess: async () => {
+          resetRetryCount();
           state.progress = 100;
           state.status = 'completed';
           state.bytesUploaded = file.size;
@@ -656,6 +793,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     <UploadContext.Provider value={{
       uploads,
       isUploading,
+      networkState,
       addFiles,
       pauseUpload,
       resumeUpload,
