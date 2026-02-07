@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import { Archive } from 'libarchive.js';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
@@ -22,6 +23,17 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatBytes } from '@/lib/utils';
+
+// Initialize libarchive.js with worker URL
+// Use dynamic import URL for Vite compatibility
+const workerUrl = new URL(
+  '/node_modules/libarchive.js/dist/worker-bundle.js',
+  window.location.origin
+).href;
+
+Archive.init({
+  workerUrl
+});
 
 // Security constants
 const MAX_TOTAL_SIZE = 1024 * 1024 * 1024; // 1GB max
@@ -276,6 +288,15 @@ interface ArchivePreviewWrapperProps {
   userUsedBytes?: number;
 }
 
+// Type for libarchive instance
+type LibArchiveInstance = {
+  getFilesArray: () => Promise<{ file: { name: string; size: number; extract: () => Promise<File> }; path: string }[]>;
+  hasEncryptedData: () => Promise<boolean | null>;
+  usePassword: (password: string) => Promise<void>;
+  extractFiles: () => Promise<Record<string, any>>;
+  close: () => Promise<void>;
+};
+
 export const ArchivePreviewWrapper = ({
   file,
   userId,
@@ -294,6 +315,18 @@ export const ArchivePreviewWrapper = ({
   const [archivePassword, setArchivePassword] = useState('');
   const [archiveBlob, setArchiveBlob] = useState<Blob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // State for archive type detection
+  const [archiveType, setArchiveType] = useState<'zip' | 'libarchive' | null>(null);
+  const [libArchiveRef, setLibArchiveRef] = useState<LibArchiveInstance | null>(null);
+  const [libArchiveFilesMap, setLibArchiveFilesMap] = useState<Map<string, { name: string; size: number; extract: () => Promise<File> }>>(new Map());
+
+  // Helper to detect archive format
+  const getArchiveFormat = (fileName: string): 'zip' | 'libarchive' => {
+    const lowerName = fileName.toLowerCase();
+    if (lowerName.endsWith('.zip')) return 'zip';
+    return 'libarchive'; // Use libarchive.js for RAR, 7z, TAR, etc.
+  };
 
   const loadArchive = useCallback(async () => {
     setIsLoading(true);
@@ -318,52 +351,108 @@ export const ArchivePreviewWrapper = ({
       const blob = await response.blob();
       setArchiveBlob(blob);
 
-      // Only ZIP files are supported for preview/extraction with JSZip
-      const isZip = file.name.toLowerCase().endsWith('.zip');
-      
-      if (!isZip) {
-        // For non-ZIP archives, show a message that only download is supported
-        setError('Only ZIP files can be previewed. RAR/7z/TAR files can be downloaded but not previewed in browser.');
-        setIsLoading(false);
-        return;
-      }
+      const format = getArchiveFormat(file.name);
+      setArchiveType(format);
 
-      // Parse ZIP file
-      try {
-        const zip = await JSZip.loadAsync(blob);
-        const entries = Object.entries(zip.files);
-        
-        if (entries.length === 0) {
-          setError('Archive appears to be empty');
-          setIsLoading(false);
-          return;
+      if (format === 'zip') {
+        // Parse ZIP file with JSZip
+        try {
+          const zip = await JSZip.loadAsync(blob);
+          const entries = Object.entries(zip.files);
+          
+          if (entries.length === 0) {
+            setError('Archive appears to be empty');
+            setIsLoading(false);
+            return;
+          }
+
+          const fileList: PreviewFile[] = entries.map(([relativePath, zipEntry]) => {
+            const pathValidation = validatePath(relativePath);
+            return {
+              name: relativePath.split('/').filter(p => p).pop() || relativePath,
+              path: relativePath,
+              size: (zipEntry as any)._data?.uncompressedSize || 0,
+              isDirectory: zipEntry.dir,
+              extractable: pathValidation.valid && !zipEntry.dir
+            };
+          });
+          
+          // Sort: folders first, then by path
+          const sortedFiles = fileList.sort((a, b) => {
+            if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+            return a.path.localeCompare(b.path);
+          });
+          
+          setPreviewFiles(sortedFiles);
+        } catch (zipError: any) {
+          // Check if password protected
+          if (zipError.message?.includes('Encrypted') || zipError.message?.includes('password')) {
+            setNeedsPassword(true);
+          } else {
+            console.error('ZIP parsing error:', zipError);
+            setError('Failed to read archive contents');
+          }
         }
-
-        const fileList: PreviewFile[] = entries.map(([relativePath, zipEntry]) => {
-          const pathValidation = validatePath(relativePath);
-          return {
-            name: relativePath.split('/').filter(p => p).pop() || relativePath,
-            path: relativePath,
-            size: (zipEntry as any)._data?.uncompressedSize || 0,
-            isDirectory: zipEntry.dir,
-            extractable: pathValidation.valid && !zipEntry.dir
-          };
-        });
-        
-        // Sort: folders first, then by path
-        const sortedFiles = fileList.sort((a, b) => {
-          if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-          return a.path.localeCompare(b.path);
-        });
-        
-        setPreviewFiles(sortedFiles);
-      } catch (zipError: any) {
-        // Check if password protected
-        if (zipError.message?.includes('Encrypted') || zipError.message?.includes('password')) {
-          setNeedsPassword(true);
-        } else {
-          console.error('ZIP parsing error:', zipError);
-          setError('Failed to read archive contents');
+      } else {
+        // Use libarchive.js for RAR, 7z, TAR, etc.
+        try {
+          // Create a File object from the blob
+          const archiveFile = new File([blob], file.name, { type: blob.type || 'application/octet-stream' });
+          
+          // Open the archive with libarchive.js
+          const archive = await Archive.open(archiveFile) as unknown as LibArchiveInstance;
+          setLibArchiveRef(archive);
+          
+          // Check for encrypted data
+          const isEncrypted = await archive.hasEncryptedData();
+          if (isEncrypted === true) {
+            setNeedsPassword(true);
+            setIsLoading(false);
+            return;
+          }
+          
+          // Get file listing
+          const filesArray = await archive.getFilesArray();
+          
+          if (filesArray.length === 0) {
+            setError('Archive appears to be empty');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Build files map for extraction
+          const filesMap = new Map<string, { name: string; size: number; extract: () => Promise<File> }>();
+          const fileList: PreviewFile[] = filesArray.map((entry) => {
+            const fullPath = entry.path + entry.file.name;
+            const pathValidation = validatePath(fullPath);
+            
+            filesMap.set(fullPath, entry.file);
+            
+            return {
+              name: entry.file.name,
+              path: fullPath,
+              size: entry.file.size || 0,
+              isDirectory: false, // libarchive.js only returns files
+              extractable: pathValidation.valid
+            };
+          });
+          
+          setLibArchiveFilesMap(filesMap);
+          
+          // Sort by path
+          const sortedFiles = fileList.sort((a, b) => a.path.localeCompare(b.path));
+          setPreviewFiles(sortedFiles);
+        } catch (archiveError: any) {
+          console.error('Archive parsing error:', archiveError);
+          
+          // Check for common errors
+          if (archiveError.message?.includes('password') || archiveError.message?.includes('encrypted')) {
+            setNeedsPassword(true);
+          } else if (archiveError.message?.includes('Worker')) {
+            setError('Failed to initialize archive reader. Please try again.');
+          } else {
+            setError(`Failed to read archive: ${archiveError.message || 'Unknown error'}`);
+          }
         }
       }
     } catch (error: any) {
@@ -376,6 +465,13 @@ export const ArchivePreviewWrapper = ({
 
   useEffect(() => {
     loadArchive();
+    
+    // Cleanup libarchive instance on unmount
+    return () => {
+      if (libArchiveRef) {
+        libArchiveRef.close?.().catch(console.error);
+      }
+    };
   }, [loadArchive]);
 
   const handlePasswordSubmit = async () => {
@@ -385,10 +481,40 @@ export const ArchivePreviewWrapper = ({
     setError(null);
     
     try {
-      // JSZip doesn't natively support encrypted ZIPs
-      // For now, show error that password-protected ZIPs aren't supported
-      setError('Password-protected ZIP files are not currently supported for preview. Please extract locally.');
-      setNeedsPassword(false);
+      if (archiveType === 'libarchive' && libArchiveRef) {
+        // Use password with libarchive
+        await libArchiveRef.usePassword(archivePassword);
+        
+        // Try to get files again
+        const filesArray = await libArchiveRef.getFilesArray();
+        
+        const filesMap = new Map<string, { name: string; size: number; extract: () => Promise<File> }>();
+        const fileList: PreviewFile[] = filesArray.map((entry) => {
+          const fullPath = entry.path + entry.file.name;
+          const pathValidation = validatePath(fullPath);
+          
+          filesMap.set(fullPath, entry.file);
+          
+          return {
+            name: entry.file.name,
+            path: fullPath,
+            size: entry.file.size || 0,
+            isDirectory: false,
+            extractable: pathValidation.valid
+          };
+        });
+        
+        setLibArchiveFilesMap(filesMap);
+        setPreviewFiles(fileList.sort((a, b) => a.path.localeCompare(b.path)));
+        setNeedsPassword(false);
+      } else {
+        // JSZip doesn't natively support encrypted ZIPs
+        setError('Password-protected ZIP files are not currently supported for preview. Please extract locally.');
+        setNeedsPassword(false);
+      }
+    } catch (passwordError: any) {
+      console.error('Password error:', passwordError);
+      setError('Incorrect password or failed to decrypt archive.');
     } finally {
       setIsLoading(false);
     }
@@ -403,8 +529,6 @@ export const ArchivePreviewWrapper = ({
     setExtractedFiles([]);
 
     try {
-      const zip = await JSZip.loadAsync(archiveBlob);
-      
       const filesToExtract = selectedFiles.size > 0 
         ? previewFiles.filter(f => selectedFiles.has(f.path) && f.extractable)
         : previewFiles.filter(f => f.extractable);
@@ -427,62 +551,128 @@ export const ArchivePreviewWrapper = ({
       const fileList: { name: string; size: number }[] = [];
       let totalExtractedSize = 0;
 
-      for (let i = 0; i < filesToExtract.length; i++) {
-        const fileInfo = filesToExtract[i];
-        const zipEntry = zip.files[fileInfo.path];
-        
-        if (!zipEntry || zipEntry.dir) continue;
+      if (archiveType === 'zip') {
+        // Extract from ZIP using JSZip
+        const zip = await JSZip.loadAsync(archiveBlob);
 
-        try {
-          const content = await zipEntry.async('blob');
+        for (let i = 0; i < filesToExtract.length; i++) {
+          const fileInfo = filesToExtract[i];
+          const zipEntry = zip.files[fileInfo.path];
           
-          // Check individual file size
-          if (content.size > MAX_INDIVIDUAL_FILE_SIZE) {
-            console.warn(`Skipping oversized file: ${fileInfo.name}`);
-            continue;
+          if (!zipEntry || zipEntry.dir) continue;
+
+          try {
+            const content = await zipEntry.async('blob');
+            
+            // Check individual file size
+            if (content.size > MAX_INDIVIDUAL_FILE_SIZE) {
+              console.warn(`Skipping oversized file: ${fileInfo.name}`);
+              continue;
+            }
+            
+            // Check total size limit
+            totalExtractedSize += content.size;
+            if (totalExtractedSize > MAX_TOTAL_SIZE) {
+              throw new Error('Total extraction size limit exceeded');
+            }
+
+            const sanitizedName = sanitizeFileName(fileInfo.name);
+            const storagePath = `${userId}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${sanitizedName}`;
+
+            // Upload to storage
+            const { error: uploadError } = await supabase.storage
+              .from('user-files')
+              .upload(storagePath, content);
+
+            if (uploadError) {
+              console.error(`Upload error for ${fileInfo.name}:`, uploadError);
+              continue;
+            }
+
+            // Create file record
+            const { error: insertError } = await supabase.from('files').insert({
+              user_id: userId,
+              name: fileInfo.name,
+              size_bytes: content.size,
+              mime_type: getMimeType(fileInfo.name),
+              storage_path: storagePath
+            });
+
+            if (insertError) {
+              console.error(`Insert error for ${fileInfo.name}:`, insertError);
+              // Clean up uploaded file
+              await supabase.storage.from('user-files').remove([storagePath]);
+              continue;
+            }
+
+            fileList.push({ name: fileInfo.name, size: content.size });
+          } catch (fileError) {
+            console.error(`Error extracting ${fileInfo.name}:`, fileError);
           }
-          
-          // Check total size limit
-          totalExtractedSize += content.size;
-          if (totalExtractedSize > MAX_TOTAL_SIZE) {
-            throw new Error('Total extraction size limit exceeded');
-          }
 
-          const sanitizedName = sanitizeFileName(fileInfo.name);
-          const storagePath = `${userId}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${sanitizedName}`;
-
-          // Upload to storage
-          const { error: uploadError } = await supabase.storage
-            .from('user-files')
-            .upload(storagePath, content);
-
-          if (uploadError) {
-            console.error(`Upload error for ${fileInfo.name}:`, uploadError);
-            continue;
-          }
-
-          // Create file record
-          const { error: insertError } = await supabase.from('files').insert({
-            user_id: userId,
-            name: fileInfo.name,
-            size_bytes: content.size,
-            mime_type: getMimeType(fileInfo.name),
-            storage_path: storagePath
-          });
-
-          if (insertError) {
-            console.error(`Insert error for ${fileInfo.name}:`, insertError);
-            // Clean up uploaded file
-            await supabase.storage.from('user-files').remove([storagePath]);
-            continue;
-          }
-
-          fileList.push({ name: fileInfo.name, size: content.size });
-        } catch (fileError) {
-          console.error(`Error extracting ${fileInfo.name}:`, fileError);
+          setProgress(((i + 1) / filesToExtract.length) * 100);
         }
+      } else {
+        // Extract using libarchive.js
+        for (let i = 0; i < filesToExtract.length; i++) {
+          const fileInfo = filesToExtract[i];
+          const compressedFile = libArchiveFilesMap.get(fileInfo.path);
+          
+          if (!compressedFile) continue;
 
-        setProgress(((i + 1) / filesToExtract.length) * 100);
+          try {
+            // Extract the file using libarchive
+            const extractedFile = await compressedFile.extract();
+            const content = new Blob([extractedFile], { type: 'application/octet-stream' });
+            
+            // Check individual file size
+            if (content.size > MAX_INDIVIDUAL_FILE_SIZE) {
+              console.warn(`Skipping oversized file: ${fileInfo.name}`);
+              continue;
+            }
+            
+            // Check total size limit
+            totalExtractedSize += content.size;
+            if (totalExtractedSize > MAX_TOTAL_SIZE) {
+              throw new Error('Total extraction size limit exceeded');
+            }
+
+            const sanitizedName = sanitizeFileName(fileInfo.name);
+            const storagePath = `${userId}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${sanitizedName}`;
+
+            // Upload to storage
+            const { error: uploadError } = await supabase.storage
+              .from('user-files')
+              .upload(storagePath, content);
+
+            if (uploadError) {
+              console.error(`Upload error for ${fileInfo.name}:`, uploadError);
+              continue;
+            }
+
+            // Create file record
+            const { error: insertError } = await supabase.from('files').insert({
+              user_id: userId,
+              name: fileInfo.name,
+              size_bytes: content.size,
+              mime_type: getMimeType(fileInfo.name),
+              storage_path: storagePath
+            });
+
+            if (insertError) {
+              console.error(`Insert error for ${fileInfo.name}:`, insertError);
+              // Clean up uploaded file
+              await supabase.storage.from('user-files').remove([storagePath]);
+              continue;
+            }
+
+            fileList.push({ name: fileInfo.name, size: content.size });
+          } catch (fileError) {
+            console.error(`Error extracting ${fileInfo.name}:`, fileError);
+          }
+
+          setProgress(((i + 1) / filesToExtract.length) * 100);
+        }
       }
 
       setExtractedFiles(fileList);
@@ -505,16 +695,31 @@ export const ArchivePreviewWrapper = ({
     if (!archiveBlob) return;
     
     try {
-      const zip = await JSZip.loadAsync(archiveBlob);
-      const zipEntry = zip.files[fileInfo.path];
-      
-      if (!zipEntry) {
-        toast.error('File not found in archive');
-        return;
+      if (archiveType === 'zip') {
+        // Download from ZIP using JSZip
+        const zip = await JSZip.loadAsync(archiveBlob);
+        const zipEntry = zip.files[fileInfo.path];
+        
+        if (!zipEntry) {
+          toast.error('File not found in archive');
+          return;
+        }
+        
+        const content = await zipEntry.async('blob');
+        saveAs(content, fileInfo.name);
+      } else {
+        // Download using libarchive.js
+        const compressedFile = libArchiveFilesMap.get(fileInfo.path);
+        
+        if (!compressedFile) {
+          toast.error('File not found in archive');
+          return;
+        }
+        
+        const extractedFile = await compressedFile.extract();
+        saveAs(extractedFile, fileInfo.name);
       }
       
-      const content = await zipEntry.async('blob');
-      saveAs(content, fileInfo.name);
       toast.success(`Downloaded ${fileInfo.name}`);
     } catch (error) {
       console.error('Download error:', error);
