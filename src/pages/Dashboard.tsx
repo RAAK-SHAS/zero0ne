@@ -19,7 +19,6 @@ import { VersionHistory } from '@/components/VersionHistory';
 import { EncryptionDialog } from '@/components/EncryptionDialog';
 import { BatchActions } from '@/components/BatchActions';
 import { SearchFilter } from '@/components/SearchFilter';
-import { ZipHandler } from '@/components/ZipHandler';
 import { ArchiveManager, isArchiveExtension, ArchivePreviewWrapper } from '@/components/ArchiveManager';
 import { GlobalUploadIndicator } from '@/components/GlobalUploadIndicator';
 import { DownloadManager } from '@/components/DownloadManager';
