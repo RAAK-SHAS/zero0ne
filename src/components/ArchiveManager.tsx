@@ -24,15 +24,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatBytes } from '@/lib/utils';
 
-// Initialize libarchive.js with worker URL
-// Use dynamic import URL for Vite compatibility
-const workerUrl = new URL(
-  '/node_modules/libarchive.js/dist/worker-bundle.js',
-  window.location.origin
-).href;
-
+// Initialize libarchive.js with custom worker factory for Vite compatibility
 Archive.init({
-  workerUrl
+  getWorker: () => {
+    // Use Vite's native worker import with proper bundling
+    return new Worker(
+      new URL('libarchive.js/dist/worker-bundle.js', import.meta.url),
+      { type: 'module' }
+    );
+  }
 });
 
 // Security constants
