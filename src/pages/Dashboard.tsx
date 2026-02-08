@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUploadManager } from '@/contexts/UploadContext';
@@ -23,6 +23,7 @@ import { ArchiveManager, isArchiveExtension, ArchivePreviewWrapper } from '@/com
 import { GlobalUploadIndicator } from '@/components/GlobalUploadIndicator';
 import { DownloadManager } from '@/components/DownloadManager';
 import { UploadQueuePanel } from '@/components/UploadQueuePanel';
+import { UploadSummary } from '@/components/UploadSummary';
 import { ResumeUploadDialog } from '@/components/ResumeUploadDialog';
 import { CreateFolderDialog } from '@/components/CreateFolderDialog';
 import { FolderBreadcrumb } from '@/components/FolderBreadcrumb';
@@ -31,13 +32,14 @@ import { ViewToggle } from '@/components/ViewToggle';
 import { ActivityPanel } from '@/components/ActivityPanel';
 import { StorageAnalytics } from '@/components/StorageAnalytics';
 import { TagManager } from '@/components/TagManager';
+import { FileTypeFilter, FileTypeCategory, getFileTypeCategory } from '@/components/FileTypeFilter';
+import { SortControl, SortConfig } from '@/components/SortControl';
 import { toast } from 'sonner';
 import { 
   Upload, 
   Cloud, 
   LogOut, 
   Trash2, 
-  ArrowUpDown, 
   FolderPlus, 
   Star, 
   BarChart3,
@@ -105,7 +107,7 @@ const Dashboard = () => {
   const [shareToken, setShareToken] = useState('');
   const [renameFileId, setRenameFileId] = useState<string | null>(null);
   const [renameFolderId, setRenameFolderId] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'date', direction: 'desc' });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
@@ -119,6 +121,7 @@ const Dashboard = () => {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [filterFavorites, setFilterFavorites] = useState(false);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<FileTypeCategory>('all');
   const [previewArchiveFile, setPreviewArchiveFile] = useState<FileItem | null>(null);
   
   const { addFiles, isUploading, uploads, resumeUpload, cancelUpload, getPausedUploadsNeedingFile } = useUploadManager();
@@ -455,40 +458,83 @@ const Dashboard = () => {
   // Get all unique tags from files
   const allTags = [...new Set(files.flatMap(f => f.tags || []))];
 
-  // Filter and sort files
-  const filteredAndSortedFiles = files
-    .filter(file => {
-      // Filter by current folder
+  // Calculate file type counts for filter
+  const fileTypeCounts = useMemo(() => {
+    const counts: Record<FileTypeCategory, number> = {
+      all: 0,
+      images: 0,
+      videos: 0,
+      documents: 0,
+      audio: 0,
+      archives: 0,
+      other: 0,
+    };
+    
+    files.forEach(file => {
+      // Only count files in current folder context
       if (currentFolderId) {
-        if (file.folder_id !== currentFolderId) return false;
+        if (file.folder_id !== currentFolderId) return;
       } else {
-        if (file.folder_id) return false;
+        if (file.folder_id) return;
       }
       
-      // Filter by search
-      if (searchQuery && !file.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
-      }
-      
-      // Filter by favorites
-      if (filterFavorites && !file.is_favorite) return false;
-      
-      // Filter by tag
-      if (filterTag && !(file.tags || []).includes(filterTag)) return false;
-      
-      return true;
-    })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'size':
-          return b.size_bytes - a.size_bytes;
-        case 'date':
-        default:
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }
+      const category = getFileTypeCategory(file.name, file.mime_type);
+      counts[category]++;
+      counts.all++;
     });
+    
+    return counts;
+  }, [files, currentFolderId]);
+
+  // Filter and sort files
+  const filteredAndSortedFiles = useMemo(() => {
+    return files
+      .filter(file => {
+        // Filter by current folder
+        if (currentFolderId) {
+          if (file.folder_id !== currentFolderId) return false;
+        } else {
+          if (file.folder_id) return false;
+        }
+        
+        // Filter by search
+        if (searchQuery && !file.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+          return false;
+        }
+        
+        // Filter by favorites
+        if (filterFavorites && !file.is_favorite) return false;
+        
+        // Filter by tag
+        if (filterTag && !(file.tags || []).includes(filterTag)) return false;
+        
+        // Filter by file type
+        if (filterType !== 'all') {
+          const category = getFileTypeCategory(file.name, file.mime_type);
+          if (category !== filterType) return false;
+        }
+        
+        return true;
+      })
+      .sort((a, b) => {
+        const { field, direction } = sortConfig;
+        let comparison = 0;
+        
+        switch (field) {
+          case 'name':
+            comparison = a.name.localeCompare(b.name);
+            break;
+          case 'size':
+            comparison = a.size_bytes - b.size_bytes;
+            break;
+          case 'date':
+          default:
+            comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        }
+        
+        return direction === 'asc' ? comparison : -comparison;
+      });
+  }, [files, currentFolderId, searchQuery, filterFavorites, filterTag, filterType, sortConfig]);
 
   const currentFolders = getChildFolders(currentFolderId);
   const currentPath = getCurrentPath();
@@ -626,17 +672,13 @@ const Dashboard = () => {
                 </Select>
               )}
               
-              <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-                <SelectTrigger className="w-[120px]">
-                  <ArrowUpDown className="h-4 w-4 mr-2" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="date">Date</SelectItem>
-                  <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="size">Size</SelectItem>
-                </SelectContent>
-              </Select>
+              <FileTypeFilter 
+                value={filterType} 
+                onChange={setFilterType} 
+                fileCounts={fileTypeCounts}
+              />
+              
+              <SortControl value={sortConfig} onChange={setSortConfig} />
               
               <ViewToggle view={viewMode} onChange={setViewMode} />
               
@@ -676,6 +718,7 @@ const Dashboard = () => {
                 onEncrypt={(id) => setEncryptFileId(id)}
                 onVersionHistory={(id) => setVersionHistoryFileId(id)}
                 onExtractZip={handleExtractZip}
+                onToggleFavorite={handleToggleFavorite}
               />
             ) : (
               <FileGrid
@@ -720,6 +763,9 @@ const Dashboard = () => {
           userUsedBytes={profile?.storage_used_bytes}
         />
       )}
+
+      {/* Upload Summary */}
+      <UploadSummary onOpenQueue={() => setShowUploadQueue(true)} />
 
       <BatchActions
         selectedCount={selectedFiles.length}
