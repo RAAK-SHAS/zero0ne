@@ -151,6 +151,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "files_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "folders_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "files_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -163,24 +170,33 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_hidden: boolean
+          is_locked: boolean
           name: string
           parent_id: string | null
+          password_hash: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
+          is_hidden?: boolean
+          is_locked?: boolean
           name: string
           parent_id?: string | null
+          password_hash?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
+          is_hidden?: boolean
+          is_locked?: boolean
           name?: string
           parent_id?: string | null
+          password_hash?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -190,6 +206,13 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "folders_safe"
             referencedColumns: ["id"]
           },
           {
@@ -262,7 +285,61 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      folders_safe: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          is_hidden: boolean | null
+          is_locked: boolean | null
+          name: string | null
+          parent_id: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          is_hidden?: boolean | null
+          is_locked?: boolean | null
+          name?: string | null
+          parent_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          is_hidden?: boolean | null
+          is_locked?: boolean | null
+          name?: string | null
+          parent_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "folders_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       cleanup_old_trash: { Args: never; Returns: undefined }
