@@ -35,6 +35,7 @@ import { TagManager } from '@/components/TagManager';
 import { FileTypeFilter, FileTypeCategory, getFileTypeCategory } from '@/components/FileTypeFilter';
 import { SortControl, SortConfig } from '@/components/SortControl';
 import { toast } from 'sonner';
+import { FolderLockDialog } from '@/components/FolderLockDialog';
 import { 
   Upload, 
   Cloud, 
@@ -43,7 +44,8 @@ import {
   FolderPlus, 
   Star, 
   BarChart3,
-  Activity
+  Activity,
+  EyeOff
 } from 'lucide-react';
 import JSZip from 'jszip';
 import {
@@ -133,13 +135,22 @@ const Dashboard = () => {
     folders,
     currentFolderId,
     setCurrentFolderId,
+    showHidden,
+    setShowHidden,
     createFolder,
     renameFolder,
     deleteFolder,
+    toggleHidden,
+    markUnlocked,
+    isFolderUnlocked,
     moveToFolder,
     getCurrentPath,
     getChildFolders,
   } = useFolders(user?.id);
+
+  // Folder lock dialog state
+  const [lockFolderId, setLockFolderId] = useState<string | null>(null);
+  const [lockAction, setLockAction] = useState<'lock' | 'unlock' | 'remove_lock' | 'change_password'>('lock');
 
   useEffect(() => {
     loadData();
@@ -654,6 +665,16 @@ const Dashboard = () => {
                 <Star className={`h-4 w-4 ${filterFavorites ? 'fill-current' : ''}`} />
               </Button>
 
+              {/* Show hidden folders toggle */}
+              <Button
+                variant={showHidden ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowHidden(!showHidden)}
+                title={showHidden ? "Hide hidden folders" : "Show hidden folders"}
+              >
+                <EyeOff className="h-4 w-4" />
+              </Button>
+
               {/* Tag filter */}
               {allTags.length > 0 && (
                 <Select 
@@ -698,9 +719,23 @@ const Dashboard = () => {
             {/* Folders */}
             <FolderGrid
               folders={currentFolders}
-              onOpen={setCurrentFolderId}
+              onOpen={(id) => {
+                const folder = folders.find(f => f.id === id);
+                if (folder?.is_locked && !isFolderUnlocked(id)) {
+                  setLockFolderId(id);
+                  setLockAction('unlock');
+                } else {
+                  setCurrentFolderId(id);
+                }
+              }}
               onRename={setRenameFolderId}
               onDelete={setDeleteFolderId}
+              onToggleHidden={toggleHidden}
+              onLock={(id) => { setLockFolderId(id); setLockAction('lock'); }}
+              onUnlock={(id) => { setLockFolderId(id); setLockAction('unlock'); }}
+              onRemoveLock={(id) => { setLockFolderId(id); setLockAction('remove_lock'); }}
+              onChangePassword={(id) => { setLockFolderId(id); setLockAction('change_password'); }}
+              isFolderUnlocked={isFolderUnlocked}
             />
             
             {/* Files */}
@@ -860,6 +895,22 @@ const Dashboard = () => {
         open={!!encryptFileId}
         onClose={() => setEncryptFileId(null)}
         onSuccess={loadData}
+      />
+
+      <FolderLockDialog
+        open={!!lockFolderId}
+        onOpenChange={(open) => { if (!open) setLockFolderId(null); }}
+        folderId={lockFolderId}
+        folderName={folders.find(f => f.id === lockFolderId)?.name || ''}
+        isLocked={folders.find(f => f.id === lockFolderId)?.is_locked || false}
+        action={lockAction}
+        onSuccess={() => {
+          if (lockAction === 'unlock' && lockFolderId) {
+            markUnlocked(lockFolderId);
+            setCurrentFolderId(lockFolderId);
+          }
+          loadData();
+        }}
       />
     </div>
   );

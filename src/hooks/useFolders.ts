@@ -9,24 +9,29 @@ export interface Folder {
   parent_id: string | null;
   created_at: string;
   updated_at: string;
+  is_hidden: boolean;
+  is_locked: boolean;
 }
 
 export const useFolders = (userId: string | undefined) => {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showHidden, setShowHidden] = useState(false);
+  const [unlockedFolders, setUnlockedFolders] = useState<Set<string>>(new Set());
 
   const loadFolders = useCallback(async () => {
     if (!userId) return;
     
     try {
+      // Use the safe view that excludes password_hash
       const { data, error } = await supabase
-        .from('folders')
+        .from('folders_safe')
         .select('*')
         .order('name');
       
       if (error) throw error;
-      setFolders(data || []);
+      setFolders((data as Folder[]) || []);
     } catch (error: any) {
       console.error('Failed to load folders:', error);
     } finally {
@@ -51,14 +56,9 @@ export const useFolders = (userId: string | undefined) => {
           schema: 'public',
           table: 'folders',
         },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setFolders(prev => [...prev, payload.new as Folder]);
-          } else if (payload.eventType === 'UPDATE') {
-            setFolders(prev => prev.map(f => f.id === (payload.new as Folder).id ? payload.new as Folder : f));
-          } else if (payload.eventType === 'DELETE') {
-            setFolders(prev => prev.filter(f => f.id !== (payload.old as Folder).id));
-          }
+        () => {
+          // Reload from safe view on any change
+          loadFolders();
         }
       )
       .subscribe();
@@ -66,7 +66,24 @@ export const useFolders = (userId: string | undefined) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, loadFolders]);
+
+  // Clear unlocked folders on page visibility change (simulates logout/refresh)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) return;
+      // Don't clear on tab focus, only on actual navigation/refresh
+    };
+    
+    const handleBeforeUnload = () => {
+      setUnlockedFolders(new Set());
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   const createFolder = useCallback(async (name: string, parentId: string | null = null) => {
     if (!userId) return null;
@@ -123,6 +140,28 @@ export const useFolders = (userId: string | undefined) => {
     }
   }, [currentFolderId]);
 
+  const toggleHidden = useCallback(async (folderId: string, isHidden: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('folders')
+        .update({ is_hidden: !isHidden, updated_at: new Date().toISOString() })
+        .eq('id', folderId);
+
+      if (error) throw error;
+      toast.success(isHidden ? 'Folder unhidden' : 'Folder hidden');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update folder');
+    }
+  }, []);
+
+  const markUnlocked = useCallback((folderId: string) => {
+    setUnlockedFolders(prev => new Set(prev).add(folderId));
+  }, []);
+
+  const isFolderUnlocked = useCallback((folderId: string) => {
+    return unlockedFolders.has(folderId);
+  }, [unlockedFolders]);
+
   const moveToFolder = useCallback(async (fileIds: string[], folderId: string | null) => {
     try {
       const { error } = await supabase
@@ -150,17 +189,27 @@ export const useFolders = (userId: string | undefined) => {
   }, [folders, currentFolderId]);
 
   const getChildFolders = useCallback((parentId: string | null) => {
-    return folders.filter(f => f.parent_id === parentId);
-  }, [folders]);
+    return folders.filter(f => {
+      if (f.parent_id !== parentId) return false;
+      // Hide hidden folders unless showHidden is on
+      if (f.is_hidden && !showHidden) return false;
+      return true;
+    });
+  }, [folders, showHidden]);
 
   return {
     folders,
     currentFolderId,
     setCurrentFolderId,
     loading,
+    showHidden,
+    setShowHidden,
     createFolder,
     renameFolder,
     deleteFolder,
+    toggleHidden,
+    markUnlocked,
+    isFolderUnlocked,
     moveToFolder,
     getCurrentPath,
     getChildFolders,
