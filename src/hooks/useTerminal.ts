@@ -732,6 +732,45 @@ Available Commands:
     return outputLines;
   }, [addLine, userId, files, folders, callbacks, getCurrentFolderFiles, getCurrentFolderSubfolders, resolveFileName, resolveFolderName, getPathString, commandHistory]);
 
+  // Main executeCommand with piping support
+  const executeCommand = useCallback(async (input: string) => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+
+    addLine('input', `$ ${trimmed}`);
+    setCommandHistory(prev => [...prev, trimmed]);
+    setHistoryIndex(-1);
+    setIsProcessing(true);
+
+    try {
+      // Check for pipe operator
+      const pipeSegments = trimmed.split(/\s*\|\s*/);
+      
+      if (pipeSegments.length > 1) {
+        // Execute piped commands sequentially
+        let pipedOutput: string[] = [];
+        for (let i = 0; i < pipeSegments.length; i++) {
+          const segment = pipeSegments[i].trim();
+          if (!segment) continue;
+          
+          if (i === 0) {
+            // First command: execute normally, collect output
+            pipedOutput = await executeSingleCommand(segment, true, []);
+          } else {
+            // Subsequent commands: pass piped output
+            pipedOutput = await executeSingleCommand(segment, true, pipedOutput);
+          }
+        }
+      } else {
+        await executeSingleCommand(trimmed, false, []);
+      }
+    } catch (err: any) {
+      addLine('error', `Error: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [addLine, executeSingleCommand]);
+
   const getAutocomplete = useCallback((input: string): string[] => {
     const parts = input.split(/\s+/);
     
