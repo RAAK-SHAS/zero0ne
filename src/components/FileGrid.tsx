@@ -201,8 +201,8 @@ export const FileGrid = memo(({
           onVersionHistory={onVersionHistory}
           onExtractZip={onExtractZip}
           onToggleFavorite={onToggleFavorite}
+          onEdit={onEdit}
         />
-      ))}
     </div>
   );
 });
