@@ -822,6 +822,7 @@ const Dashboard = () => {
                     onVersionHistory={(id) => setVersionHistoryFileId(id)}
                     onExtractZip={handleExtractZip}
                     onToggleFavorite={handleToggleFavorite}
+                    onEdit={handleEdit}
                   />
                 ) : (
                   <FileGrid
