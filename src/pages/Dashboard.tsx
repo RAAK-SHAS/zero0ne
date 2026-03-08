@@ -999,30 +999,35 @@ const Dashboard = () => {
         fileUrl={editType === 'pdf' ? editFileUrl : null}
         open={editType === 'pdf'}
         onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+        onSaved={loadData}
       />
       <VideoEditor
         file={editType === 'video' ? editFile : null}
         fileUrl={editType === 'video' ? editFileUrl : null}
         open={editType === 'video'}
         onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+        onSaved={loadData}
       />
       <AudioEditor
         file={editType === 'audio' ? editFile : null}
         fileUrl={editType === 'audio' ? editFileUrl : null}
         open={editType === 'audio'}
         onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+        onSaved={loadData}
       />
       <ImageEditor
         file={editType === 'image' ? editFile : null}
         fileUrl={editType === 'image' ? editFileUrl : null}
         open={editType === 'image'}
         onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+        onSaved={loadData}
       />
       <MarkdownEditor
         file={editType === 'markdown' ? editFile : null}
         fileUrl={editType === 'markdown' ? editFileUrl : null}
         open={editType === 'markdown'}
         onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+        onSaved={loadData}
       />
     </div>
   );

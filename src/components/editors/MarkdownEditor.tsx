@@ -5,45 +5,40 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Bold, Italic, Strikethrough, List, ListOrdered, Link, Image, Code,
-  Heading1, Heading2, X, Save, Eye, EyeOff, Quote,
+  Heading1, Heading2, X, Save, Eye, EyeOff, Quote, Download, Upload, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { marked } from 'marked';
+import { useEditorSave } from '@/hooks/useEditorSave';
 
 interface MarkdownEditorProps {
-  file: { id: string; name: string } | null;
+  file: { id: string; name: string; storage_path: string; user_id: string } | null;
   fileUrl: string | null;
   open: boolean;
   onClose: () => void;
+  onSaved?: () => void;
 }
 
-export const MarkdownEditor = ({ file, fileUrl, open, onClose }: MarkdownEditorProps) => {
+export const MarkdownEditor = ({ file, fileUrl, open, onClose, onSaved }: MarkdownEditorProps) => {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
+
+  const { saveToCloud, downloadLocally, isSaving } = useEditorSave();
 
   useEffect(() => {
     if (!open || !fileUrl) return;
     setLoading(true);
     fetch(fileUrl)
       .then(res => res.text())
-      .then(text => {
-        setContent(text);
-        setLoading(false);
-      })
-      .catch(() => {
-        toast.error('Failed to load file');
-        setLoading(false);
-      });
+      .then(text => { setContent(text); setLoading(false); })
+      .catch(() => { toast.error('Failed to load file'); setLoading(false); });
   }, [open, fileUrl]);
 
   const renderedHtml = useMemo(() => {
-    try {
-      return marked.parse(content, { async: false }) as string;
-    } catch {
-      return content;
-    }
+    try { return marked.parse(content, { async: false }) as string; }
+    catch { return content; }
   }, [content]);
 
   const insertAtCursor = (before: string, after = '') => {
@@ -74,19 +69,21 @@ export const MarkdownEditor = ({ file, fileUrl, open, onClose }: MarkdownEditorP
     { icon: Image, action: () => insertAtCursor('![alt](', ')'), label: 'Image' },
   ];
 
-  const handleSave = () => {
-    toast.success('File content saved locally. Download to persist changes.');
-  };
-
   const handleDownload = () => {
     const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file?.name || 'document.md';
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('File downloaded!');
+    downloadLocally(blob, file?.name || 'document.md');
+  };
+
+  const handleSaveToCloud = async () => {
+    if (!file) return;
+    const blob = new Blob([content], { type: 'text/plain' });
+    await saveToCloud(blob, {
+      fileId: file.id,
+      fileName: file.name,
+      storagePath: file.storage_path,
+      userId: file.user_id,
+    });
+    onSaved?.();
   };
 
   if (!file || !fileUrl) return null;
@@ -101,17 +98,16 @@ export const MarkdownEditor = ({ file, fileUrl, open, onClose }: MarkdownEditorP
               <Badge variant="secondary" className="text-xs font-mono">MARKDOWN EDITOR</Badge>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant={showPreview ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setShowPreview(!showPreview)}
-                className="gap-1"
-              >
+              <Button variant={showPreview ? 'default' : 'outline'} size="sm" onClick={() => setShowPreview(!showPreview)} className="gap-1">
                 {showPreview ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 <span className="text-xs">Preview</span>
               </Button>
               <Button variant="outline" size="sm" onClick={handleDownload} className="gap-1">
-                <Save className="h-3.5 w-3.5" /> Download
+                <Download className="h-3.5 w-3.5" /> Export
+              </Button>
+              <Button variant="default" size="sm" onClick={handleSaveToCloud} className="gap-1" disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                Save to Cloud
               </Button>
               <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
             </div>
@@ -119,7 +115,6 @@ export const MarkdownEditor = ({ file, fileUrl, open, onClose }: MarkdownEditorP
           <DialogDescription className="sr-only">Edit markdown: {file.name}</DialogDescription>
         </DialogHeader>
 
-        {/* Toolbar */}
         <div className="flex items-center gap-0.5 px-4 py-2 border-b border-border bg-card/50 glass overflow-x-auto shrink-0">
           {toolbarActions.map((t, i) => (
             <Button key={i} variant="ghost" size="sm" onClick={t.action} title={t.label} className="h-8 w-8 p-0">
@@ -134,7 +129,6 @@ export const MarkdownEditor = ({ file, fileUrl, open, onClose }: MarkdownEditorP
           </div>
         ) : (
           <div className={cn("flex-1 flex min-h-0", showPreview ? "divide-x divide-border" : "")}>
-            {/* Editor */}
             <div className={cn("flex-1 min-h-0", showPreview ? "w-1/2" : "w-full")}>
               <Textarea
                 id="md-editor"
@@ -144,8 +138,6 @@ export const MarkdownEditor = ({ file, fileUrl, open, onClose }: MarkdownEditorP
                 placeholder="Start writing..."
               />
             </div>
-
-            {/* Preview */}
             {showPreview && (
               <div className="flex-1 w-1/2 overflow-auto p-6 bg-card/20">
                 <div
