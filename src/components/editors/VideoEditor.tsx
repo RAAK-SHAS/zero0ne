@@ -6,16 +6,18 @@ import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import {
   Play, Pause, SkipBack, SkipForward, Scissors, Type, Volume2, VolumeX,
-  X, Save, Maximize2, RotateCcw, Clock, Film,
+  X, Save, Download, Upload, RotateCcw, Clock, Loader2, Camera,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useEditorSave } from '@/hooks/useEditorSave';
 
 interface VideoEditorProps {
-  file: { id: string; name: string; mime_type: string | null } | null;
+  file: { id: string; name: string; mime_type: string | null; storage_path: string; user_id: string } | null;
   fileUrl: string | null;
   open: boolean;
   onClose: () => void;
+  onSaved?: () => void;
 }
 
 const formatTime = (seconds: number): string => {
@@ -25,7 +27,7 @@ const formatTime = (seconds: number): string => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
 };
 
-export const VideoEditor = ({ file, fileUrl, open, onClose }: VideoEditorProps) => {
+export const VideoEditor = ({ file, fileUrl, open, onClose, onSaved }: VideoEditorProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -39,6 +41,8 @@ export const VideoEditor = ({ file, fileUrl, open, onClose }: VideoEditorProps) 
   const [showTextOverlay, setShowTextOverlay] = useState(false);
   const [overlayPosition, setOverlayPosition] = useState<'top' | 'center' | 'bottom'>('bottom');
   const [overlayColor, setOverlayColor] = useState('hsl(168, 100%, 50%)');
+
+  const { saveToCloud, downloadLocally, isSaving } = useEditorSave();
 
   useEffect(() => {
     const video = videoRef.current;
@@ -61,13 +65,8 @@ export const VideoEditor = ({ file, fileUrl, open, onClose }: VideoEditorProps) 
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) {
-      video.play();
-      setIsPlaying(true);
-    } else {
-      video.pause();
-      setIsPlaying(false);
-    }
+    if (video.paused) { video.play(); setIsPlaying(true); }
+    else { video.pause(); setIsPlaying(false); }
   };
 
   const seek = (time: number) => {
@@ -77,20 +76,11 @@ export const VideoEditor = ({ file, fileUrl, open, onClose }: VideoEditorProps) 
     setCurrentTime(time);
   };
 
-  const handleTimelineChange = (val: number[]) => {
-    seek((val[0] / 100) * duration);
-  };
-
-  const handleTrimChange = (val: number[]) => {
-    setTrimStart(val[0]);
-    setTrimEnd(val[1]);
-  };
-
+  const handleTimelineChange = (val: number[]) => seek((val[0] / 100) * duration);
+  const handleTrimChange = (val: number[]) => { setTrimStart(val[0]); setTrimEnd(val[1]); };
   const handleVolumeChange = (val: number[]) => {
     setVolume(val);
-    if (videoRef.current) {
-      videoRef.current.volume = val[0] / 100;
-    }
+    if (videoRef.current) videoRef.current.volume = val[0] / 100;
   };
 
   const toggleMute = () => {
@@ -108,15 +98,46 @@ export const VideoEditor = ({ file, fileUrl, open, onClose }: VideoEditorProps) 
     if (videoRef.current) videoRef.current.playbackRate = next;
   };
 
-  const handleSave = () => {
-    const trimStartTime = (trimStart / 100) * duration;
-    const trimEndTime = (trimEnd / 100) * duration;
-    toast.success(`Video trim set: ${formatTime(trimStartTime)} - ${formatTime(trimEndTime)}`);
+  const captureFrame = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+      if (blob) {
+        downloadLocally(blob, `frame_${formatTime(currentTime).replace(/[:.]/g, '-')}.png`);
+        toast.success('Frame captured!');
+      }
+    }, 'image/png');
+  };
+
+  const handleSaveToCloud = async () => {
+    if (!file || !fileUrl) return;
+    // For video, we save metadata about edits since browser can't re-encode
+    const editData = {
+      trimStart: (trimStart / 100) * duration,
+      trimEnd: (trimEnd / 100) * duration,
+      playbackSpeed,
+      textOverlay: showTextOverlay ? textOverlay : null,
+      overlayPosition,
+      overlayColor,
+    };
+    const blob = new Blob([JSON.stringify(editData, null, 2)], { type: 'application/json' });
+    const metadataPath = file.storage_path.replace(/\.[^.]+$/, '_edits.json');
+    await saveToCloud(blob, {
+      fileId: file.id,
+      fileName: file.name,
+      storagePath: metadataPath,
+      userId: file.user_id,
+    });
+    onSaved?.();
   };
 
   const skipBack = () => seek(Math.max(0, currentTime - 5));
   const skipForward = () => seek(Math.min(duration, currentTime + 5));
-  const goToTrimStart = () => seek((trimStart / 100) * duration);
 
   if (!file || !fileUrl) return null;
 
@@ -134,8 +155,12 @@ export const VideoEditor = ({ file, fileUrl, open, onClose }: VideoEditorProps) 
               <Badge variant="secondary" className="text-xs font-mono">VIDEO EDITOR</Badge>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleSave} className="gap-1">
-                <Save className="h-3.5 w-3.5" /> Save
+              <Button variant="outline" size="sm" onClick={captureFrame} className="gap-1">
+                <Camera className="h-3.5 w-3.5" /> Frame
+              </Button>
+              <Button variant="default" size="sm" onClick={handleSaveToCloud} className="gap-1" disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                Save to Cloud
               </Button>
               <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
             </div>
@@ -145,14 +170,8 @@ export const VideoEditor = ({ file, fileUrl, open, onClose }: VideoEditorProps) 
 
         {/* Video Preview */}
         <div className="flex-1 bg-black flex items-center justify-center relative overflow-hidden">
-          <video
-            ref={videoRef}
-            src={fileUrl}
-            className="max-w-full max-h-full object-contain"
-            onClick={togglePlay}
-          />
+          <video ref={videoRef} src={fileUrl} className="max-w-full max-h-full object-contain" onClick={togglePlay} />
 
-          {/* Text overlay preview */}
           {showTextOverlay && textOverlay && (
             <div className={cn(
               "absolute left-0 right-0 flex justify-center pointer-events-none",
@@ -160,25 +179,15 @@ export const VideoEditor = ({ file, fileUrl, open, onClose }: VideoEditorProps) 
               overlayPosition === 'center' && "top-1/2 -translate-y-1/2",
               overlayPosition === 'bottom' && "bottom-16",
             )}>
-              <span
-                className="px-4 py-2 rounded-lg text-lg font-bold backdrop-blur-sm"
-                style={{
-                  color: overlayColor,
-                  backgroundColor: 'rgba(0,0,0,0.6)',
-                  textShadow: `0 0 10px ${overlayColor}`,
-                }}
-              >
+              <span className="px-4 py-2 rounded-lg text-lg font-bold backdrop-blur-sm"
+                style={{ color: overlayColor, backgroundColor: 'rgba(0,0,0,0.6)', textShadow: `0 0 10px ${overlayColor}` }}>
                 {textOverlay}
               </span>
             </div>
           )}
 
-          {/* Play button overlay */}
           {!isPlaying && (
-            <button
-              onClick={togglePlay}
-              className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors"
-            >
+            <button onClick={togglePlay} className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors">
               <div className="h-16 w-16 rounded-full bg-primary/80 flex items-center justify-center backdrop-blur-sm">
                 <Play className="h-8 w-8 text-primary-foreground ml-1" />
               </div>
@@ -188,94 +197,51 @@ export const VideoEditor = ({ file, fileUrl, open, onClose }: VideoEditorProps) 
 
         {/* Timeline & Controls */}
         <div className="shrink-0 border-t border-border bg-card/80 glass">
-          {/* Trim range */}
           <div className="px-4 pt-3">
             <div className="flex items-center gap-2 mb-1">
               <Scissors className="h-3.5 w-3.5 text-primary" />
               <span className="text-xs text-muted-foreground">Trim: {formatTime(trimStartTime)} — {formatTime(trimEndTime)}</span>
             </div>
             <div className="relative">
-              {/* Trim markers */}
-              <Slider
-                value={[trimStart, trimEnd]}
-                onValueChange={handleTrimChange}
-                min={0} max={100} step={0.1}
-                className="w-full"
-              />
-              {/* Playhead indicator */}
-              <div
-                className="absolute top-0 h-full w-0.5 bg-primary z-10 pointer-events-none"
-                style={{ left: `${progress}%` }}
-              />
+              <Slider value={[trimStart, trimEnd]} onValueChange={handleTrimChange} min={0} max={100} step={0.1} className="w-full" />
+              <div className="absolute top-0 h-full w-0.5 bg-primary z-10 pointer-events-none" style={{ left: `${progress}%` }} />
             </div>
           </div>
 
-          {/* Playback timeline */}
           <div className="px-4 pt-2">
-            <Slider
-              value={[progress]}
-              onValueChange={handleTimelineChange}
-              min={0} max={100} step={0.01}
-              className="w-full"
-            />
+            <Slider value={[progress]} onValueChange={handleTimelineChange} min={0} max={100} step={0.01} className="w-full" />
           </div>
 
-          {/* Controls */}
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={skipBack} className="h-8 w-8">
-                <SkipBack className="h-4 w-4" />
-              </Button>
+              <Button variant="ghost" size="icon" onClick={skipBack} className="h-8 w-8"><SkipBack className="h-4 w-4" /></Button>
               <Button variant="default" size="icon" onClick={togglePlay} className="h-10 w-10 rounded-full">
                 {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
               </Button>
-              <Button variant="ghost" size="icon" onClick={skipForward} className="h-8 w-8">
-                <SkipForward className="h-4 w-4" />
-              </Button>
-
+              <Button variant="ghost" size="icon" onClick={skipForward} className="h-8 w-8"><SkipForward className="h-4 w-4" /></Button>
               <span className="text-xs font-mono tabular-nums text-muted-foreground ml-2">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Text overlay toggle */}
               <div className="flex items-center gap-2">
-                <Button
-                  variant={showTextOverlay ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setShowTextOverlay(!showTextOverlay)}
-                  className="gap-1"
-                >
-                  <Type className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline text-xs">Text</span>
+                <Button variant={showTextOverlay ? 'default' : 'ghost'} size="sm" onClick={() => setShowTextOverlay(!showTextOverlay)} className="gap-1">
+                  <Type className="h-3.5 w-3.5" /><span className="hidden sm:inline text-xs">Text</span>
                 </Button>
                 {showTextOverlay && (
-                  <Input
-                    value={textOverlay}
-                    onChange={e => setTextOverlay(e.target.value)}
-                    placeholder="Overlay text..."
-                    className="w-40 h-8 text-xs"
-                  />
+                  <Input value={textOverlay} onChange={e => setTextOverlay(e.target.value)} placeholder="Overlay text..." className="w-40 h-8 text-xs" />
                 )}
               </div>
 
-              {/* Speed */}
               <Button variant="ghost" size="sm" onClick={changeSpeed} className="gap-1 font-mono text-xs">
-                <Clock className="h-3.5 w-3.5" />
-                {playbackSpeed}x
+                <Clock className="h-3.5 w-3.5" />{playbackSpeed}x
               </Button>
 
-              {/* Volume */}
               <Button variant="ghost" size="icon" onClick={toggleMute} className="h-8 w-8">
                 {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
               </Button>
-              <Slider
-                value={volume}
-                onValueChange={handleVolumeChange}
-                min={0} max={100} step={1}
-                className="w-20"
-              />
+              <Slider value={volume} onValueChange={handleVolumeChange} min={0} max={100} step={1} className="w-20" />
             </div>
           </div>
         </div>

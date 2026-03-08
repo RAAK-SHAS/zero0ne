@@ -5,16 +5,18 @@ import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import {
   Play, Pause, SkipBack, SkipForward, Scissors, Volume2, VolumeX,
-  X, Save, Mic, Square, Waves, SlidersHorizontal,
+  X, Save, Download, Upload, Mic, Square, Waves, SlidersHorizontal, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useEditorSave } from '@/hooks/useEditorSave';
 
 interface AudioEditorProps {
-  file: { id: string; name: string; mime_type: string | null } | null;
+  file: { id: string; name: string; mime_type: string | null; storage_path: string; user_id: string } | null;
   fileUrl: string | null;
   open: boolean;
   onClose: () => void;
+  onSaved?: () => void;
 }
 
 const formatTime = (seconds: number): string => {
@@ -23,7 +25,7 @@ const formatTime = (seconds: number): string => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-export const AudioEditor = ({ file, fileUrl, open, onClose }: AudioEditorProps) => {
+export const AudioEditor = ({ file, fileUrl, open, onClose, onSaved }: AudioEditorProps) => {
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -37,13 +39,15 @@ export const AudioEditor = ({ file, fileUrl, open, onClose }: AudioEditorProps) 
   const [loading, setLoading] = useState(true);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
 
-  // Effects
   const [fadeIn, setFadeIn] = useState([0]);
   const [fadeOut, setFadeOut] = useState([0]);
   const [bass, setBass] = useState([0]);
   const [treble, setTreble] = useState([0]);
   const [showEffects, setShowEffects] = useState(false);
+
+  const { saveToCloud, downloadLocally, isSaving } = useEditorSave();
 
   useEffect(() => {
     if (!open || !fileUrl || !waveformRef.current) return;
@@ -53,34 +57,19 @@ export const AudioEditor = ({ file, fileUrl, open, onClose }: AudioEditorProps) 
 
     const initWavesurfer = async () => {
       const WaveSurfer = (await import('wavesurfer.js')).default;
-
-      if (wavesurferRef.current) {
-        wavesurferRef.current.destroy();
-      }
+      if (wavesurferRef.current) wavesurferRef.current.destroy();
 
       ws = WaveSurfer.create({
         container: waveformRef.current!,
         waveColor: 'hsl(168, 60%, 30%)',
         progressColor: 'hsl(168, 100%, 50%)',
         cursorColor: 'hsl(168, 100%, 50%)',
-        barWidth: 2,
-        barGap: 1,
-        barRadius: 2,
-        height: 120,
-        normalize: true,
-        backend: 'WebAudio',
+        barWidth: 2, barGap: 1, barRadius: 2,
+        height: 120, normalize: true, backend: 'WebAudio',
       });
 
-      ws.on('ready', () => {
-        setDuration(ws.getDuration());
-        setLoading(false);
-        ws.setVolume(volume[0] / 100);
-      });
-
-      ws.on('audioprocess', () => {
-        setCurrentTime(ws.getCurrentTime());
-      });
-
+      ws.on('ready', () => { setDuration(ws.getDuration()); setLoading(false); ws.setVolume(volume[0] / 100); });
+      ws.on('audioprocess', () => setCurrentTime(ws.getCurrentTime()));
       ws.on('play', () => setIsPlaying(true));
       ws.on('pause', () => setIsPlaying(false));
       ws.on('finish', () => setIsPlaying(false));
@@ -90,68 +79,40 @@ export const AudioEditor = ({ file, fileUrl, open, onClose }: AudioEditorProps) 
     };
 
     initWavesurfer();
-
-    return () => {
-      if (ws) {
-        ws.destroy();
-        wavesurferRef.current = null;
-      }
-    };
+    return () => { if (ws) { ws.destroy(); wavesurferRef.current = null; } };
   }, [open, fileUrl]);
 
-  const togglePlay = () => {
-    wavesurferRef.current?.playPause();
-  };
-
-  const skipBack = () => {
-    const ws = wavesurferRef.current;
-    if (ws) ws.setTime(Math.max(0, ws.getCurrentTime() - 5));
-  };
-
-  const skipForward = () => {
-    const ws = wavesurferRef.current;
-    if (ws) ws.setTime(Math.min(ws.getDuration(), ws.getCurrentTime() + 5));
-  };
+  const togglePlay = () => wavesurferRef.current?.playPause();
+  const skipBack = () => { const ws = wavesurferRef.current; if (ws) ws.setTime(Math.max(0, ws.getCurrentTime() - 5)); };
+  const skipForward = () => { const ws = wavesurferRef.current; if (ws) ws.setTime(Math.min(ws.getDuration(), ws.getCurrentTime() + 5)); };
 
   const handleVolumeChange = (val: number[]) => {
     setVolume(val);
-    if (wavesurferRef.current) {
-      wavesurferRef.current.setVolume(val[0] / 100);
-    }
+    if (wavesurferRef.current) wavesurferRef.current.setVolume(val[0] / 100);
   };
 
   const toggleMute = () => {
     const ws = wavesurferRef.current;
     if (!ws) return;
-    if (isMuted) {
-      ws.setVolume(volume[0] / 100);
-    } else {
-      ws.setVolume(0);
-    }
+    ws.setVolume(isMuted ? volume[0] / 100 : 0);
     setIsMuted(!isMuted);
   };
 
-  const handleTrimChange = (val: number[]) => {
-    setTrimStart(val[0]);
-    setTrimEnd(val[1]);
-  };
+  const handleTrimChange = (val: number[]) => { setTrimStart(val[0]); setTrimEnd(val[1]); };
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream);
       const chunks: Blob[] = [];
-
-      mr.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       mr.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
         setRecordedChunks(chunks);
+        setRecordedBlob(blob);
         stream.getTracks().forEach(t => t.stop());
-        toast.success('Recording saved! You can merge it with the current track.');
+        toast.success('Recording saved!');
       };
-
       mr.start();
       mediaRecorderRef.current = mr;
       setIsRecording(true);
@@ -161,20 +122,45 @@ export const AudioEditor = ({ file, fileUrl, open, onClose }: AudioEditorProps) 
     }
   };
 
-  const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
+  const stopRecording = () => { mediaRecorderRef.current?.stop(); setIsRecording(false); };
+
+  const handleSaveRecordingToCloud = async () => {
+    if (!file || !recordedBlob) return;
+    const recordingPath = file.storage_path.replace(/\.[^.]+$/, '_recording.webm');
+    await saveToCloud(recordedBlob, {
+      fileId: file.id,
+      fileName: `${file.name}_recording.webm`,
+      storagePath: recordingPath,
+      userId: file.user_id,
+    });
+    onSaved?.();
   };
 
-  const handleSave = () => {
-    const startSec = (trimStart / 100) * duration;
-    const endSec = (trimEnd / 100) * duration;
-    toast.success(`Audio trim: ${formatTime(startSec)} - ${formatTime(endSec)} | Effects applied`);
+  const handleSaveEditsToCloud = async () => {
+    if (!file) return;
+    const editData = {
+      trimStart: (trimStart / 100) * duration,
+      trimEnd: (trimEnd / 100) * duration,
+      fadeIn: fadeIn[0], fadeOut: fadeOut[0],
+      bass: bass[0], treble: treble[0],
+    };
+    const blob = new Blob([JSON.stringify(editData, null, 2)], { type: 'application/json' });
+    const metadataPath = file.storage_path.replace(/\.[^.]+$/, '_edits.json');
+    await saveToCloud(blob, {
+      fileId: file.id,
+      fileName: file.name,
+      storagePath: metadataPath,
+      userId: file.user_id,
+    });
+    onSaved?.();
+  };
+
+  const handleDownloadRecording = () => {
+    if (!recordedBlob) return;
+    downloadLocally(recordedBlob, `recording_${file?.name || 'audio'}.webm`);
   };
 
   if (!file || !fileUrl) return null;
-
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -186,8 +172,9 @@ export const AudioEditor = ({ file, fileUrl, open, onClose }: AudioEditorProps) 
               <Badge variant="secondary" className="text-xs font-mono">AUDIO EDITOR</Badge>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleSave} className="gap-1">
-                <Save className="h-3.5 w-3.5" /> Save
+              <Button variant="default" size="sm" onClick={handleSaveEditsToCloud} className="gap-1" disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                Save to Cloud
               </Button>
               <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
             </div>
@@ -201,30 +188,22 @@ export const AudioEditor = ({ file, fileUrl, open, onClose }: AudioEditorProps) 
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10">
                 <div className="flex items-center gap-2 text-primary">
-                  <Waves className="h-5 w-5 animate-pulse" />
-                  <span className="text-sm">Loading waveform...</span>
+                  <Waves className="h-5 w-5 animate-pulse" /><span className="text-sm">Loading waveform...</span>
                 </div>
               </div>
             )}
             <div ref={waveformRef} className="w-full" />
-
-            {/* Trim region visual */}
             <div className="absolute bottom-0 left-0 right-0 h-1">
-              <div
-                className="absolute h-full bg-primary/30"
-                style={{ left: `${trimStart}%`, width: `${trimEnd - trimStart}%` }}
-              />
+              <div className="absolute h-full bg-primary/30" style={{ left: `${trimStart}%`, width: `${trimEnd - trimStart}%` }} />
             </div>
           </div>
-
-          {/* Time display */}
           <div className="flex justify-between mt-2">
             <span className="text-xs font-mono tabular-nums text-muted-foreground">{formatTime(currentTime)}</span>
             <span className="text-xs font-mono tabular-nums text-muted-foreground">{formatTime(duration)}</span>
           </div>
         </div>
 
-        {/* Trim controls */}
+        {/* Trim */}
         <div className="px-6 py-2">
           <div className="flex items-center gap-2 mb-1">
             <Scissors className="h-3.5 w-3.5 text-primary" />
@@ -232,52 +211,29 @@ export const AudioEditor = ({ file, fileUrl, open, onClose }: AudioEditorProps) 
               Trim: {formatTime((trimStart / 100) * duration)} — {formatTime((trimEnd / 100) * duration)}
             </span>
           </div>
-          <Slider
-            value={[trimStart, trimEnd]}
-            onValueChange={handleTrimChange}
-            min={0} max={100} step={0.1}
-            className="w-full"
-          />
+          <Slider value={[trimStart, trimEnd]} onValueChange={handleTrimChange} min={0} max={100} step={0.1} className="w-full" />
         </div>
 
         {/* Controls */}
         <div className="px-6 py-3 border-t border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={skipBack} className="h-8 w-8">
-              <SkipBack className="h-4 w-4" />
-            </Button>
+            <Button variant="ghost" size="icon" onClick={skipBack} className="h-8 w-8"><SkipBack className="h-4 w-4" /></Button>
             <Button variant="default" size="icon" onClick={togglePlay} className="h-10 w-10 rounded-full">
               {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
             </Button>
-            <Button variant="ghost" size="icon" onClick={skipForward} className="h-8 w-8">
-              <SkipForward className="h-4 w-4" />
-            </Button>
+            <Button variant="ghost" size="icon" onClick={skipForward} className="h-8 w-8"><SkipForward className="h-4 w-4" /></Button>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Record */}
-            <Button
-              variant={isRecording ? 'destructive' : 'outline'}
-              size="sm"
-              onClick={isRecording ? stopRecording : startRecording}
-              className="gap-1"
-            >
+            <Button variant={isRecording ? 'destructive' : 'outline'} size="sm" onClick={isRecording ? stopRecording : startRecording} className="gap-1">
               {isRecording ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
               <span className="text-xs">{isRecording ? 'Stop' : 'Record'}</span>
             </Button>
 
-            {/* Effects toggle */}
-            <Button
-              variant={showEffects ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setShowEffects(!showEffects)}
-              className="gap-1"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span className="text-xs">Effects</span>
+            <Button variant={showEffects ? 'default' : 'outline'} size="sm" onClick={() => setShowEffects(!showEffects)} className="gap-1">
+              <SlidersHorizontal className="h-3.5 w-3.5" /><span className="text-xs">Effects</span>
             </Button>
 
-            {/* Volume */}
             <Button variant="ghost" size="icon" onClick={toggleMute} className="h-8 w-8">
               {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </Button>
@@ -285,43 +241,41 @@ export const AudioEditor = ({ file, fileUrl, open, onClose }: AudioEditorProps) 
           </div>
         </div>
 
-        {/* Effects panel */}
+        {/* Effects */}
         {showEffects && (
           <div className="px-6 py-4 border-t border-border bg-card/30 space-y-4">
             <h4 className="text-sm font-medium flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4 text-primary" /> Audio Effects
             </h4>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Fade In (sec)</label>
-                <Slider value={fadeIn} onValueChange={setFadeIn} min={0} max={10} step={0.5} />
-                <span className="text-xs text-primary tabular-nums">{fadeIn[0]}s</span>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Fade Out (sec)</label>
-                <Slider value={fadeOut} onValueChange={setFadeOut} min={0} max={10} step={0.5} />
-                <span className="text-xs text-primary tabular-nums">{fadeOut[0]}s</span>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Bass</label>
-                <Slider value={bass} onValueChange={setBass} min={-10} max={10} step={1} />
-                <span className="text-xs text-primary tabular-nums">{bass[0] > 0 ? '+' : ''}{bass[0]}dB</span>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Treble</label>
-                <Slider value={treble} onValueChange={setTreble} min={-10} max={10} step={1} />
-                <span className="text-xs text-primary tabular-nums">{treble[0] > 0 ? '+' : ''}{treble[0]}dB</span>
-              </div>
+              {[
+                { label: 'Fade In (sec)', value: fadeIn, setter: setFadeIn, min: 0, max: 10, step: 0.5, unit: 's' },
+                { label: 'Fade Out (sec)', value: fadeOut, setter: setFadeOut, min: 0, max: 10, step: 0.5, unit: 's' },
+                { label: 'Bass', value: bass, setter: setBass, min: -10, max: 10, step: 1, unit: 'dB' },
+                { label: 'Treble', value: treble, setter: setTreble, min: -10, max: 10, step: 1, unit: 'dB' },
+              ].map(({ label, value, setter, min, max, step, unit }) => (
+                <div key={label}>
+                  <label className="text-xs text-muted-foreground mb-1 block">{label}</label>
+                  <Slider value={value} onValueChange={setter} min={min} max={max} step={step} />
+                  <span className="text-xs text-primary tabular-nums">{value[0] > 0 ? '+' : ''}{value[0]}{unit}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Recorded chunks info */}
-        {recordedChunks.length > 0 && (
-          <div className="px-6 py-2 border-t border-border">
+        {/* Recording info */}
+        {recordedBlob && (
+          <div className="px-6 py-2 border-t border-border flex items-center gap-2">
             <Badge variant="secondary" className="text-xs">
-              <Mic className="h-3 w-3 mr-1" /> Recording captured — ready to merge
+              <Mic className="h-3 w-3 mr-1" /> Recording captured
             </Badge>
+            <Button variant="outline" size="sm" onClick={handleDownloadRecording} className="gap-1 text-xs">
+              <Download className="h-3 w-3" /> Download
+            </Button>
+            <Button variant="default" size="sm" onClick={handleSaveRecordingToCloud} className="gap-1 text-xs" disabled={isSaving}>
+              <Upload className="h-3 w-3" /> Save to Cloud
+            </Button>
           </div>
         )}
       </DialogContent>
