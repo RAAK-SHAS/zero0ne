@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
-  Cloud, FolderOpen, Clock, Trash2, Settings, LogOut, Upload, Share2, Plus, Terminal,
+  Cloud, FolderOpen, Clock, Trash2, Settings, LogOut, Upload, Share2, Plus,
 } from 'lucide-react';
 
 interface AppSidebarProps {
@@ -63,14 +63,6 @@ export const AppSidebar = ({ storageUsed, storageTotal, onUploadClick, onNewFold
         <span className="text-base font-bold tracking-tight">CloudStore</span>
       </div>
 
-      {/* System status */}
-      <div className="px-4 pt-3 pb-1 shrink-0">
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/30 border border-border">
-          <Terminal className="h-3 w-3 text-primary" />
-          <span className="terminal-text text-[10px]">&gt;_ SYS.READY</span>
-          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary animate-pulse-neon" />
-        </div>
-      </div>
 
       {/* Action buttons */}
       <div className="px-3 pt-3 pb-2 space-y-1.5 shrink-0">
