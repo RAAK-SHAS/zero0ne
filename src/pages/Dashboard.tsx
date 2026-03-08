@@ -39,6 +39,8 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { MobileNav } from '@/components/MobileNav';
 import { CommandPalette, useCommandPalette } from '@/components/CommandPalette';
 import { SystemLog, useSystemLog } from '@/components/SystemLog';
+import { TerminalPanel } from '@/components/TerminalPanel';
+import { useTerminal } from '@/hooks/useTerminal';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
 import { PDFEditor } from '@/components/editors/PDFEditor';
@@ -144,6 +146,9 @@ const Dashboard = () => {
     getCurrentPath,
     getChildFolders,
   } = useFolders(user?.id);
+
+  // Terminal state
+  const [terminalOpen, setTerminalOpen] = useState(false);
 
   // Folder lock dialog state
   const [lockFolderId, setLockFolderId] = useState<string | null>(null);
@@ -386,6 +391,34 @@ const Dashboard = () => {
     }
     return result;
   };
+
+  const terminal = useTerminal(user?.id, files, folders, {
+    onNavigateFolder: setCurrentFolderId,
+    onDownload: handleDownload,
+    onPreview: handlePreview,
+    onShare: handleShare,
+    onDelete: (id: string) => setDeleteFileId(id),
+    onRename: (id: string) => setRenameFileId(id),
+    onCreateFolder: handleCreateFolder,
+    onDeleteFolder: (id: string) => setDeleteFolderId(id),
+    onUploadClick: () => navigate('/upload'),
+    refreshData: loadData,
+  });
+
+  useEffect(() => {
+    terminal.syncFolderState(currentFolderId);
+  }, [currentFolderId, terminal.syncFolderState]);
+
+  useEffect(() => {
+    const handler = (e: globalThis.KeyboardEvent) => {
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        setTerminalOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const handleToggleFavorite = async (fileId: string, current: boolean) => {
     const newState = await toggleFavorite(fileId, current);
@@ -861,6 +894,19 @@ const Dashboard = () => {
 
       {/* Command Palette */}
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} onSearch={setSearchQuery} />
+
+      {/* Terminal Panel */}
+      <TerminalPanel
+        lines={terminal.lines}
+        isProcessing={terminal.isProcessing}
+        onExecute={terminal.executeCommand}
+        getAutocomplete={terminal.getAutocomplete}
+        commandHistory={terminal.commandHistory}
+        historyIndex={terminal.historyIndex}
+        setHistoryIndex={terminal.setHistoryIndex}
+        isOpen={terminalOpen}
+        onToggle={() => setTerminalOpen(prev => !prev)}
+      />
 
       {selectedFiles.length > 0 && (
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-40">
