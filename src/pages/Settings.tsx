@@ -13,7 +13,8 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { MobileNav } from '@/components/MobileNav';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { toast } from 'sonner';
-import { User, Shield, HardDrive, Palette } from 'lucide-react';
+import { User, Shield, HardDrive, Palette, Mail } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 const Settings = () => {
   const { user, signOut } = useAuth();
