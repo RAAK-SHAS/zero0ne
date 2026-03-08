@@ -13,7 +13,8 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { MobileNav } from '@/components/MobileNav';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { toast } from 'sonner';
-import { User, Shield, HardDrive, Palette } from 'lucide-react';
+import { User, Shield, HardDrive, Palette, Mail } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 const Settings = () => {
   const { user, signOut } = useAuth();
@@ -24,6 +25,8 @@ const Settings = () => {
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [savingName, setSavingName] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -58,6 +61,26 @@ const Settings = () => {
     setLoading(false);
     if (error) { toast.error(error.message); } else {
       toast.success('Password updated'); setNewPassword(''); setConfirmPassword('');
+    }
+  };
+
+  const handleChangeEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newEmail.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast.error('Please enter a valid email address'); return;
+    }
+    if (trimmed === user?.email) {
+      toast.error('This is already your current email'); return;
+    }
+    setEmailLoading(true);
+    const { error } = await supabase.auth.updateUser({ email: trimmed });
+    setEmailLoading(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('Confirmation sent to both old and new email. Please verify to complete the change.');
+      setNewEmail('');
     }
   };
 
@@ -115,6 +138,37 @@ const Settings = () => {
                     </Button>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Email */}
+            <Card className="border-border/60">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-base"><Mail className="h-4 w-4 text-primary" /> Email</CardTitle>
+                <CardDescription className="text-xs">Manage your email address</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">{user?.email}</p>
+                  <Badge variant="outline" className="text-xs border-primary/30 text-primary">Primary</Badge>
+                </div>
+                <Separator />
+                <form onSubmit={handleChangeEmail} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newEmail" className="text-xs">Change Email</Label>
+                    <Input
+                      id="newEmail"
+                      type="email"
+                      placeholder="newemail@example.com"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">A confirmation link will be sent to both your current and new email.</p>
+                  </div>
+                  <Button type="submit" size="sm" disabled={emailLoading || !newEmail.trim()}>
+                    {emailLoading ? 'Sending...' : 'Update Email'}
+                  </Button>
+                </form>
               </CardContent>
             </Card>
 
