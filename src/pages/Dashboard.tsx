@@ -41,6 +41,11 @@ import { CommandPalette, useCommandPalette } from '@/components/CommandPalette';
 import { SystemLog, useSystemLog } from '@/components/SystemLog';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
+import { PDFEditor } from '@/components/editors/PDFEditor';
+import { VideoEditor } from '@/components/editors/VideoEditor';
+import { AudioEditor } from '@/components/editors/AudioEditor';
+import { ImageEditor } from '@/components/editors/ImageEditor';
+import { MarkdownEditor } from '@/components/editors/MarkdownEditor';
 import { 
   Upload, Cloud, LogOut, Trash2, FolderPlus, Star, BarChart3,
   Activity, EyeOff, Menu, Terminal, Search
