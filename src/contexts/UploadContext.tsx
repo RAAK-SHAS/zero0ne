@@ -5,9 +5,17 @@ import * as tus from 'tus-js-client';
 
 const DB_NAME = 'CloudStoreUploads';
 const STORE_NAME = 'uploads';
-const TUS_CHUNK_SIZE = 6 * 1024 * 1024; // 6MB chunks for TUS
-const MAX_RETRIES = 10; // More retries for large files
-const TOKEN_REFRESH_INTERVAL = 30 * 60 * 1000; // Refresh token every 30 minutes
+const TUS_CHUNK_SIZE_SMALL = 6 * 1024 * 1024; // 6MB for files < 100MB
+const TUS_CHUNK_SIZE_MEDIUM = 20 * 1024 * 1024; // 20MB for files 100MB-1GB
+const TUS_CHUNK_SIZE_LARGE = 50 * 1024 * 1024; // 50MB for files > 1GB
+const MAX_RETRIES = 10;
+const TOKEN_REFRESH_INTERVAL = 30 * 60 * 1000;
+
+const getChunkSize = (fileSize: number): number => {
+  if (fileSize > 1024 * 1024 * 1024) return TUS_CHUNK_SIZE_LARGE; // > 1GB
+  if (fileSize > 100 * 1024 * 1024) return TUS_CHUNK_SIZE_MEDIUM; // > 100MB
+  return TUS_CHUNK_SIZE_SMALL;
+};
 
 export interface NetworkState {
   isOnline: boolean;
@@ -373,13 +381,27 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         uploadDataDuringCreation: true,
         removeFingerprintOnSuccess: true,
-        chunkSize: TUS_CHUNK_SIZE,
+        chunkSize: getChunkSize(file.size),
         parallelUploads: 1, // Keep at 1 for stability with large files
         metadata: {
           bucketName: 'user-files',
           objectName: state.storagePath,
           contentType: file.type || 'application/octet-stream',
           cacheControl: '3600',
+        },
+        onShouldRetry: (err, retryAttempt, options) => {
+          // Always retry on network errors or 5xx server errors
+          const status = (err as any)?.originalResponse?.getStatus?.();
+          if (status === 403 || status === 401) return true; // Will refresh token in onError
+          if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
+          return true; // Retry on network errors, 5xx, 408, 429
+        },
+        onBeforeRequest: async (req) => {
+          // Refresh token before each chunk for long uploads
+          const freshToken = await getValidToken();
+          if (freshToken) {
+            req.setHeader('Authorization', `Bearer ${freshToken}`);
+          }
         },
         onError: async (error) => {
           console.error('TUS upload error:', error);
@@ -442,7 +464,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           state.eta = state.speed > 0 ? (bytesTotal - bytesUploaded) / state.speed : 0;
           
           // Save progress periodically for resume capability
-          const chunkNumber = Math.floor(bytesUploaded / TUS_CHUNK_SIZE);
+          const chunkSize = getChunkSize(file.size);
+          const chunkNumber = Math.floor(bytesUploaded / chunkSize);
           if (!state.uploadedChunks.includes(chunkNumber)) {
             state.uploadedChunks.push(chunkNumber);
             saveUploadState(state);
@@ -554,7 +577,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         fileType: file.type,
         storagePath,
         uploadedChunks: [],
-        totalChunks: Math.ceil(file.size / TUS_CHUNK_SIZE),
+        totalChunks: Math.ceil(file.size / getChunkSize(file.size)),
         status: 'queued',
         progress: 0,
         bytesUploaded: 0,
