@@ -93,10 +93,26 @@ const Settings = () => {
                     <AvatarFallback className="text-lg font-semibold bg-primary/10 text-primary">{initials}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{profile?.email || user?.email}</p>
+                    <p className="font-medium">{profile?.name || profile?.email || user?.email}</p>
                     <p className="text-xs text-muted-foreground">
                       Member since {profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '—'}
                     </p>
+                  </div>
+                </div>
+                <Separator className="my-4" />
+                <div className="space-y-1.5">
+                  <Label htmlFor="displayName" className="text-xs">Display Name</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="displayName"
+                      placeholder="Enter your name"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      maxLength={100}
+                    />
+                    <Button size="sm" onClick={handleSaveName} disabled={savingName || displayName.trim() === (profile?.name || '')}>
+                      {savingName ? 'Saving...' : 'Save'}
+                    </Button>
                   </div>
                 </div>
               </CardContent>
