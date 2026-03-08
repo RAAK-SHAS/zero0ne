@@ -55,7 +55,7 @@ const getAutoTag = (name: string, mimeType: string | null): string | null => {
 
 const FileCard = memo(({
   file, isSelected, onSelectFile, onDownload, onShare, onDelete, onRename,
-  onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite,
+  onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit,
 }: {
   file: FileItem;
   isSelected: boolean;
@@ -69,6 +69,7 @@ const FileCard = memo(({
   onVersionHistory?: (fileId: string) => void;
   onExtractZip?: (fileId: string) => void;
   onToggleFavorite?: (fileId: string, current: boolean) => void;
+  onEdit?: (fileId: string) => void;
 }) => {
   const isArchive = /\.(zip|rar|7z|tar|gz|bz2|xz|tgz)$/i.test(file.name);
   const autoTag = getAutoTag(file.name, file.mime_type);
