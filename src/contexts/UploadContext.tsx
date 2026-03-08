@@ -450,7 +450,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           state.eta = state.speed > 0 ? (bytesTotal - bytesUploaded) / state.speed : 0;
           
           // Save progress periodically for resume capability
-          const chunkNumber = Math.floor(bytesUploaded / TUS_CHUNK_SIZE);
+          const chunkSize = getChunkSize(file.size);
+          const chunkNumber = Math.floor(bytesUploaded / chunkSize);
           if (!state.uploadedChunks.includes(chunkNumber)) {
             state.uploadedChunks.push(chunkNumber);
             saveUploadState(state);
