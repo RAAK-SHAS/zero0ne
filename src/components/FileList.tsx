@@ -154,7 +154,7 @@ FileRow.displayName = 'FileRow';
 
 export const FileList = memo(({
   files, selectedFiles, onSelectFile, onSelectAll, onDownload, onShare,
-  onDelete, onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite
+  onDelete, onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit
 }: FileListProps) => {
   if (files.length === 0) {
     return (
