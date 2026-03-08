@@ -18,18 +18,36 @@ import { User, Shield, HardDrive, Palette } from 'lucide-react';
 const Settings = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<{ email: string; storage_used_bytes: number; storage_quota_bytes: number; created_at: string } | null>(null);
+  const [profile, setProfile] = useState<{ email: string; name?: string; storage_used_bytes: number; storage_quota_bytes: number; created_at: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     if (user) {
       supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => {
-        if (data) setProfile(data);
+        if (data) {
+          setProfile(data as any);
+          setDisplayName((data as any).name || '');
+        }
       });
     }
   }, [user]);
+
+  const handleSaveName = async () => {
+    if (!user) return;
+    const trimmed = displayName.trim();
+    if (trimmed.length > 100) { toast.error('Name must be under 100 characters'); return; }
+    setSavingName(true);
+    const { error } = await supabase.from('profiles').update({ name: trimmed } as any).eq('id', user.id);
+    setSavingName(false);
+    if (error) { toast.error(error.message); } else {
+      toast.success('Name updated');
+      setProfile(prev => prev ? { ...prev, name: trimmed } : prev);
+    }
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +61,7 @@ const Settings = () => {
     }
   };
 
-  const initials = user?.email?.slice(0, 2).toUpperCase() || 'U';
+  const initials = (profile?.name || user?.email)?.slice(0, 2).toUpperCase() || 'U';
 
   return (
     <div className="flex h-screen bg-background">
@@ -75,10 +93,26 @@ const Settings = () => {
                     <AvatarFallback className="text-lg font-semibold bg-primary/10 text-primary">{initials}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{profile?.email || user?.email}</p>
+                    <p className="font-medium">{profile?.name || profile?.email || user?.email}</p>
                     <p className="text-xs text-muted-foreground">
                       Member since {profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '—'}
                     </p>
+                  </div>
+                </div>
+                <Separator className="my-4" />
+                <div className="space-y-1.5">
+                  <Label htmlFor="displayName" className="text-xs">Display Name</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="displayName"
+                      placeholder="Enter your name"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      maxLength={100}
+                    />
+                    <Button size="sm" onClick={handleSaveName} disabled={savingName || displayName.trim() === (profile?.name || '')}>
+                      {savingName ? 'Saving...' : 'Save'}
+                    </Button>
                   </div>
                 </div>
               </CardContent>

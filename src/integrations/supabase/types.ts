@@ -229,6 +229,7 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          name: string | null
           storage_quota_bytes: number
           storage_used_bytes: number
         }
@@ -236,6 +237,7 @@ export type Database = {
           created_at?: string
           email: string
           id: string
+          name?: string | null
           storage_quota_bytes?: number
           storage_used_bytes?: number
         }
@@ -243,6 +245,7 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          name?: string | null
           storage_quota_bytes?: number
           storage_used_bytes?: number
         }
