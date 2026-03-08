@@ -564,7 +564,12 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-background to-accent/20">
+    <div className="flex h-screen bg-background relative">
+      {/* Grid background */}
+      <div className="fixed inset-0 pointer-events-none" style={{
+        backgroundImage: `linear-gradient(hsl(168 100% 50% / 0.02) 1px, transparent 1px), linear-gradient(90deg, hsl(168 100% 50% / 0.02) 1px, transparent 1px)`,
+        backgroundSize: '60px 60px',
+      }} />
       {/* Sidebar - desktop */}
       <AppSidebar
         storageUsed={profile?.storage_used_bytes || 0}
