@@ -731,7 +731,7 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <div className="bg-card rounded-lg p-4 md:p-6 shadow-lg">
+            <div className="neon-border rounded-lg p-4 md:p-6 bg-card/30 glass">
               {/* Folders - only in files view */}
               {currentView === 'files' && (
                 <FolderGrid
