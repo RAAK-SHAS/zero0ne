@@ -392,6 +392,34 @@ const Dashboard = () => {
     return result;
   };
 
+  const terminal = useTerminal(user?.id, files, folders, {
+    onNavigateFolder: setCurrentFolderId,
+    onDownload: handleDownload,
+    onPreview: handlePreview,
+    onShare: handleShare,
+    onDelete: (id: string) => setDeleteFileId(id),
+    onRename: (id: string) => setRenameFileId(id),
+    onCreateFolder: handleCreateFolder,
+    onDeleteFolder: (id: string) => setDeleteFolderId(id),
+    onUploadClick: () => navigate('/upload'),
+    refreshData: loadData,
+  });
+
+  useEffect(() => {
+    terminal.syncFolderState(currentFolderId);
+  }, [currentFolderId, terminal.syncFolderState]);
+
+  useEffect(() => {
+    const handler = (e: globalThis.KeyboardEvent) => {
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        setTerminalOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   const handleToggleFavorite = async (fileId: string, current: boolean) => {
     const newState = await toggleFavorite(fileId, current);
     logActivity(newState ? 'favorite' : 'unfavorite', 'file', fileId, files.find(f => f.id === fileId)?.name || null);
