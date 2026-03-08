@@ -36,44 +36,24 @@ import { FileTypeFilter, FileTypeCategory, getFileTypeCategory } from '@/compone
 import { SortControl, SortConfig } from '@/components/SortControl';
 import { AppSidebar } from '@/components/AppSidebar';
 import { MobileNav } from '@/components/MobileNav';
+import { CommandPalette, useCommandPalette } from '@/components/CommandPalette';
+import { SystemLog, useSystemLog } from '@/components/SystemLog';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
 import { 
-  Upload, 
-  Cloud, 
-  LogOut, 
-  Trash2, 
-  FolderPlus, 
-  Star, 
-  BarChart3,
-  Activity,
-  EyeOff,
-  Menu
+  Upload, Cloud, LogOut, Trash2, FolderPlus, Star, BarChart3,
+  Activity, EyeOff, Menu, Terminal, Search
 } from 'lucide-react';
 import JSZip from 'jszip';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDropzone } from 'react-dropzone';
