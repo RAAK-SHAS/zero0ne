@@ -698,40 +698,49 @@ const Dashboard = () => {
             </div>
 
             {currentView === 'files' && (currentFolderId || folders.length > 0) && (
-              <div className="neon-border rounded-lg px-4 py-2 bg-card/50 glass">
+              <div className="neon-border rounded-xl px-4 py-2.5 bg-card/30 glass backdrop-blur-md">
                 <FolderBreadcrumb path={currentPath} onNavigate={setCurrentFolderId} />
               </div>
             )}
 
             {/* Toolbar */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="space-y-3">
               <h2 className="text-2xl font-bold md:hidden">
                 {viewTitle}
                 {filterTag && <span className="text-primary ml-2">#{filterTag}</span>}
               </h2>
-              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+              
+              <div className="flex items-center gap-2 flex-wrap">
                 <SearchFilter value={searchQuery} onChange={setSearchQuery} />
                 
-                {/* Favorites filter */}
-                <Button
-                  variant={filterFavorites ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterFavorites(!filterFavorites)}
-                >
-                  <Star className={`h-4 w-4 ${filterFavorites ? 'fill-current' : ''}`} />
-                </Button>
-
-                {/* Show hidden folders toggle */}
-                {currentView === 'files' && (
-                  <Button
-                    variant={showHidden ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setShowHidden(!showHidden)}
-                    title={showHidden ? "Hide hidden folders" : "Show hidden folders"}
+                {/* Quick action buttons */}
+                <div className="flex items-center gap-1 bg-background/30 border border-border/30 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setFilterFavorites(!filterFavorites)}
+                    className={`flex items-center justify-center h-7 w-7 rounded-md transition-all duration-200 ${
+                      filterFavorites 
+                        ? 'bg-primary/10 text-primary shadow-sm shadow-primary/10' 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    }`}
+                    title="Favorites"
                   >
-                    <EyeOff className="h-4 w-4" />
-                  </Button>
-                )}
+                    <Star className={`h-3.5 w-3.5 ${filterFavorites ? 'fill-current' : ''}`} />
+                  </button>
+
+                  {currentView === 'files' && (
+                    <button
+                      onClick={() => setShowHidden(!showHidden)}
+                      className={`flex items-center justify-center h-7 w-7 rounded-md transition-all duration-200 ${
+                        showHidden
+                          ? 'bg-primary/10 text-primary shadow-sm shadow-primary/10'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                      }`}
+                      title={showHidden ? "Hide hidden folders" : "Show hidden folders"}
+                    >
+                      <EyeOff className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
 
                 {/* Tag filter */}
                 {allTags.length > 0 && (
@@ -739,8 +748,8 @@ const Dashboard = () => {
                     value={filterTag || ''} 
                     onValueChange={(v) => setFilterTag(v || null)}
                   >
-                    <SelectTrigger className="w-[120px]">
-                      <SelectValue placeholder="Filter tag" />
+                    <SelectTrigger className="w-[120px] h-9 text-xs font-mono bg-background/50 border-border/50">
+                      <SelectValue placeholder="Tags" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">All tags</SelectItem>
@@ -758,17 +767,19 @@ const Dashboard = () => {
                 />
                 
                 <SortControl value={sortConfig} onChange={setSortConfig} />
-                
-                <ViewToggle view={viewMode} onChange={setViewMode} />
-                
-                {/* Mobile-only action buttons */}
-                <div className="flex gap-2 md:hidden">
-                  <Button variant="outline" size="sm" onClick={() => setShowCreateFolder(true)}>
-                    <FolderPlus className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" onClick={() => navigate('/upload')}>
-                    <Upload className="h-4 w-4" />
-                  </Button>
+
+                <div className="ml-auto flex items-center gap-2">
+                  <ViewToggle view={viewMode} onChange={setViewMode} />
+                  
+                  {/* Mobile-only action buttons */}
+                  <div className="flex gap-1.5 md:hidden">
+                    <Button variant="outline" size="sm" onClick={() => setShowCreateFolder(true)} className="h-9 w-9 p-0">
+                      <FolderPlus className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" onClick={() => navigate('/upload')} className="h-9 w-9 p-0">
+                      <Upload className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

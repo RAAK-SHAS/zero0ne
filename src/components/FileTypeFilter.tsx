@@ -8,7 +8,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { 
-  Filter, 
   Image, 
   Video, 
   FileText, 
@@ -18,6 +17,7 @@ import {
   Files
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 export type FileTypeCategory = 'all' | 'images' | 'videos' | 'documents' | 'audio' | 'archives' | 'other';
 
@@ -28,41 +28,13 @@ interface FileTypeFilterProps {
 }
 
 const FILE_TYPE_CONFIG: Record<FileTypeCategory, { label: string; icon: React.ElementType; extensions: string[] }> = {
-  all: { 
-    label: 'All Files', 
-    icon: Files,
-    extensions: [] 
-  },
-  images: { 
-    label: 'Images', 
-    icon: Image,
-    extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'heic', 'heif'] 
-  },
-  videos: { 
-    label: 'Videos', 
-    icon: Video,
-    extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'm4v', '3gp', 'ogv'] 
-  },
-  documents: { 
-    label: 'Documents', 
-    icon: FileText,
-    extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'odp', 'csv', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'ipynb'] 
-  },
-  audio: { 
-    label: 'Audio', 
-    icon: Music,
-    extensions: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'ape', 'opus'] 
-  },
-  archives: { 
-    label: 'Archives', 
-    icon: Archive,
-    extensions: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz', 'tar.gz'] 
-  },
-  other: { 
-    label: 'Other', 
-    icon: File,
-    extensions: [] 
-  },
+  all: { label: 'All Files', icon: Files, extensions: [] },
+  images: { label: 'Images', icon: Image, extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'heic', 'heif'] },
+  videos: { label: 'Videos', icon: Video, extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'm4v', '3gp', 'ogv'] },
+  documents: { label: 'Documents', icon: FileText, extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'odp', 'csv', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'ipynb'] },
+  audio: { label: 'Audio', icon: Music, extensions: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'ape', 'opus'] },
+  archives: { label: 'Archives', icon: Archive, extensions: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz', 'tar.gz'] },
+  other: { label: 'Other', icon: File, extensions: [] },
 };
 
 export const getFileTypeCategory = (fileName: string, mimeType?: string | null): FileTypeCategory => {
@@ -70,12 +42,9 @@ export const getFileTypeCategory = (fileName: string, mimeType?: string | null):
   
   for (const [category, config] of Object.entries(FILE_TYPE_CONFIG)) {
     if (category === 'all' || category === 'other') continue;
-    if (config.extensions.includes(ext)) {
-      return category as FileTypeCategory;
-    }
+    if (config.extensions.includes(ext)) return category as FileTypeCategory;
   }
   
-  // Fallback to mime type check
   if (mimeType) {
     if (mimeType.startsWith('image/')) return 'images';
     if (mimeType.startsWith('video/')) return 'videos';
@@ -93,15 +62,20 @@ export const FileTypeFilter = memo(({ value, onChange, fileCounts }: FileTypeFil
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <Icon className="h-4 w-4" />
+        <button className={cn(
+          "flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-mono transition-all duration-200",
+          "border border-border/50 bg-background/50",
+          "hover:border-primary/30 hover:bg-primary/5",
+          value !== 'all' && "border-primary/30 bg-primary/5 text-primary"
+        )}>
+          <Icon className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">{currentConfig.label}</span>
-          {value !== 'all' && (
-            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-              {fileCounts?.[value] || 0}
-            </Badge>
+          {value !== 'all' && fileCounts?.[value] !== undefined && (
+            <span className="ml-0.5 h-4 min-w-[16px] inline-flex items-center justify-center rounded bg-primary/20 text-primary text-[10px] px-1">
+              {fileCounts[value]}
+            </span>
           )}
-        </Button>
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-48">
         <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as FileTypeCategory)}>
@@ -109,11 +83,7 @@ export const FileTypeFilter = memo(({ value, onChange, fileCounts }: FileTypeFil
             const ItemIcon = config.icon;
             const count = fileCounts?.[key as FileTypeCategory];
             return (
-              <DropdownMenuRadioItem 
-                key={key} 
-                value={key}
-                className="flex items-center justify-between"
-              >
+              <DropdownMenuRadioItem key={key} value={key} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ItemIcon className="h-4 w-4" />
                   <span>{config.label}</span>
