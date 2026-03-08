@@ -117,6 +117,9 @@ const Dashboard = () => {
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<FileTypeCategory>('all');
   const [previewArchiveFile, setPreviewArchiveFile] = useState<FileItem | null>(null);
+  const [editFile, setEditFile] = useState<FileItem | null>(null);
+  const [editFileUrl, setEditFileUrl] = useState<string | null>(null);
+  const [editType, setEditType] = useState<'pdf' | 'video' | 'audio' | 'image' | 'markdown' | null>(null);
   
   const { addFiles, isUploading, uploads, resumeUpload, cancelUpload, getPausedUploadsNeedingFile } = useUploadManager();
   const { downloadFile, downloadMultipleAsZip } = useDownloadManager();
