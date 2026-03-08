@@ -77,6 +77,14 @@ serve(async (req) => {
       );
     }
 
+    // Verify the authenticated user owns the file associated with this share
+    if (!share.files || (share.files as { user_id: string }).user_id !== user.id) {
+      return new Response(
+        JSON.stringify({ error: 'Access denied' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Build updates
     const updates: Record<string, unknown> = {};
     
