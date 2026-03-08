@@ -70,6 +70,7 @@ const FileRow = memo(({
   onEdit?: (fileId: string) => void;
 }) => {
   const autoTag = getAutoTag(file.name, file.mime_type);
+  const isEditable = /\.(pdf|mp4|webm|mov|avi|mkv|mp3|wav|ogg|flac|aac|wma|jpg|jpeg|png|gif|webp|bmp|svg|md|txt|markdown)$/i.test(file.name);
   const handleCheckboxChange = useCallback(() => onSelectFile(file.id), [file.id, onSelectFile]);
   const handlePreviewClick = useCallback(() => onPreview(file.id), [file.id, onPreview]);
   const handleFavoriteClick = useCallback((e: React.MouseEvent) => {
