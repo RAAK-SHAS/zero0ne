@@ -9,7 +9,7 @@ interface StorageBarProps {
   compact?: boolean;
 }
 
-export const StorageBar = ({ used, total }: StorageBarProps) => {
+export const StorageBar = ({ used, total, compact = false }: StorageBarProps) => {
   const percentage = useMemo(() => (used / total) * 100, [used, total]);
   
   const getStorageStatus = () => {
