@@ -5,9 +5,17 @@ import * as tus from 'tus-js-client';
 
 const DB_NAME = 'CloudStoreUploads';
 const STORE_NAME = 'uploads';
-const TUS_CHUNK_SIZE = 6 * 1024 * 1024; // 6MB chunks for TUS
-const MAX_RETRIES = 10; // More retries for large files
-const TOKEN_REFRESH_INTERVAL = 30 * 60 * 1000; // Refresh token every 30 minutes
+const TUS_CHUNK_SIZE_SMALL = 6 * 1024 * 1024; // 6MB for files < 100MB
+const TUS_CHUNK_SIZE_MEDIUM = 20 * 1024 * 1024; // 20MB for files 100MB-1GB
+const TUS_CHUNK_SIZE_LARGE = 50 * 1024 * 1024; // 50MB for files > 1GB
+const MAX_RETRIES = 10;
+const TOKEN_REFRESH_INTERVAL = 30 * 60 * 1000;
+
+const getChunkSize = (fileSize: number): number => {
+  if (fileSize > 1024 * 1024 * 1024) return TUS_CHUNK_SIZE_LARGE; // > 1GB
+  if (fileSize > 100 * 1024 * 1024) return TUS_CHUNK_SIZE_MEDIUM; // > 100MB
+  return TUS_CHUNK_SIZE_SMALL;
+};
 
 export interface NetworkState {
   isOnline: boolean;
