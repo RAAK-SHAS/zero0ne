@@ -389,6 +389,20 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           contentType: file.type || 'application/octet-stream',
           cacheControl: '3600',
         },
+        onShouldRetry: (err, retryAttempt, options) => {
+          // Always retry on network errors or 5xx server errors
+          const status = (err as any)?.originalResponse?.getStatus?.();
+          if (status === 403 || status === 401) return true; // Will refresh token in onError
+          if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
+          return true; // Retry on network errors, 5xx, 408, 429
+        },
+        onBeforeRequest: async (req) => {
+          // Refresh token before each chunk for long uploads
+          const freshToken = await getValidToken();
+          if (freshToken) {
+            req.setHeader('Authorization', `Bearer ${freshToken}`);
+          }
+        },
         onError: async (error) => {
           console.error('TUS upload error:', error);
           incrementRetryCount();
