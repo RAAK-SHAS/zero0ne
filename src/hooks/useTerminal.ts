@@ -149,13 +149,10 @@ export const useTerminal = (
     return '/' + path.join('/');
   }, [folders]);
 
-  const executeCommand = useCallback(async (input: string) => {
-    const trimmed = input.trim();
-    if (!trimmed) return;
-
-    addLine('input', `$ ${trimmed}`);
-    setCommandHistory(prev => [...prev, trimmed]);
-    setHistoryIndex(-1);
+  // Internal execute that processes a single command, returns output lines
+  const executeSingleCommand = useCallback(async (rawInput: string, isPiped: boolean = false, pipedInput: string[] = []): Promise<string[]> => {
+    const trimmed = rawInput.trim();
+    if (!trimmed) return [];
 
     const parts = trimmed.split(/\s+/);
     let command = parts[0].toLowerCase();
@@ -166,7 +163,17 @@ export const useTerminal = (
       command = COMMAND_ALIASES[command];
     }
 
-    setIsProcessing(true);
+    // Collect output for piping
+    const outputLines: string[] = [];
+    const collectLine = (type: TerminalLine['type'], content: string) => {
+      if (isPiped) {
+        // Only collect output lines for piping, not info/system messages
+        if (type === 'output' || type === 'success') {
+          outputLines.push(content);
+        }
+      }
+      addLine(type, content);
+    };
 
     try {
       switch (command) {
