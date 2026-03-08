@@ -35,6 +35,7 @@ interface FileGridProps {
   onVersionHistory?: (fileId: string) => void;
   onExtractZip?: (fileId: string) => void;
   onToggleFavorite?: (fileId: string, current: boolean) => void;
+  onEdit?: (fileId: string) => void;
 }
 
 // Generate AI-like auto tag from mime type
