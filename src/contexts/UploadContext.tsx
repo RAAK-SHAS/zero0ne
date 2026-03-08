@@ -563,7 +563,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         fileType: file.type,
         storagePath,
         uploadedChunks: [],
-        totalChunks: Math.ceil(file.size / TUS_CHUNK_SIZE),
+        totalChunks: Math.ceil(file.size / getChunkSize(file.size)),
         status: 'queued',
         progress: 0,
         bytesUploaded: 0,
