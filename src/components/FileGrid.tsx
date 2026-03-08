@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { Star, MoreHorizontal, Download, Share, Trash2, Edit2, Eye, Lock, History, Archive } from 'lucide-react';
+import { Star, MoreHorizontal, Download, Share, Trash2, Edit2, Eye, Lock, History, Archive, Pencil } from 'lucide-react';
 import { formatBytes } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { FileIcon } from '@/components/FileIcon';

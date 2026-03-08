@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive, Star } from 'lucide-react';
+import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive, Star, Pencil } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
