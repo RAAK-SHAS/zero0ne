@@ -72,6 +72,7 @@ const FileCard = memo(({
   onEdit?: (fileId: string) => void;
 }) => {
   const isArchive = /\.(zip|rar|7z|tar|gz|bz2|xz|tgz)$/i.test(file.name);
+  const isEditable = /\.(pdf|mp4|webm|mov|avi|mkv|mp3|wav|ogg|flac|aac|wma|jpg|jpeg|png|gif|webp|bmp|svg|md|txt|markdown)$/i.test(file.name);
   const autoTag = getAutoTag(file.name, file.mime_type);
 
   const handleSelect = useCallback(() => onSelectFile(file.id), [file.id, onSelectFile]);
