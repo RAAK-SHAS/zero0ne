@@ -53,7 +53,7 @@ const getAutoTag = (name: string, mimeType: string | null): string | null => {
 
 const FileRow = memo(({
   file, isSelected, onSelectFile, onDownload, onShare, onDelete, onRename,
-  onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite,
+  onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit,
 }: {
   file: FileItem;
   isSelected: boolean;
@@ -67,6 +67,7 @@ const FileRow = memo(({
   onVersionHistory: (fileId: string) => void;
   onExtractZip?: (fileId: string) => void;
   onToggleFavorite?: (fileId: string, current: boolean) => void;
+  onEdit?: (fileId: string) => void;
 }) => {
   const autoTag = getAutoTag(file.name, file.mime_type);
   const handleCheckboxChange = useCallback(() => onSelectFile(file.id), [file.id, onSelectFile]);
