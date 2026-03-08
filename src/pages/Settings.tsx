@@ -61,7 +61,7 @@ const Settings = () => {
     }
   };
 
-  const initials = user?.email?.slice(0, 2).toUpperCase() || 'U';
+  const initials = (profile?.name || user?.email)?.slice(0, 2).toUpperCase() || 'U';
 
   return (
     <div className="flex h-screen bg-background">
