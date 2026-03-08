@@ -21,6 +21,21 @@ export const StorageBar = ({ used, total, compact = false }: StorageBarProps) =>
 
   const status = getStorageStatus();
   
+  if (compact) {
+    return (
+      <div className="space-y-2">
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Storage</span>
+          <span className="font-medium tabular-nums">{percentage.toFixed(0)}%</span>
+        </div>
+        <Progress value={percentage} className="h-1.5 rounded-full" />
+        <p className="text-xs text-muted-foreground">
+          {formatBytes(used)} of {formatBytes(total)}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
