@@ -18,18 +18,36 @@ import { User, Shield, HardDrive, Palette } from 'lucide-react';
 const Settings = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<{ email: string; storage_used_bytes: number; storage_quota_bytes: number; created_at: string } | null>(null);
+  const [profile, setProfile] = useState<{ email: string; name?: string; storage_used_bytes: number; storage_quota_bytes: number; created_at: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     if (user) {
       supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => {
-        if (data) setProfile(data);
+        if (data) {
+          setProfile(data as any);
+          setDisplayName((data as any).name || '');
+        }
       });
     }
   }, [user]);
+
+  const handleSaveName = async () => {
+    if (!user) return;
+    const trimmed = displayName.trim();
+    if (trimmed.length > 100) { toast.error('Name must be under 100 characters'); return; }
+    setSavingName(true);
+    const { error } = await supabase.from('profiles').update({ name: trimmed } as any).eq('id', user.id);
+    setSavingName(false);
+    if (error) { toast.error(error.message); } else {
+      toast.success('Name updated');
+      setProfile(prev => prev ? { ...prev, name: trimmed } : prev);
+    }
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
