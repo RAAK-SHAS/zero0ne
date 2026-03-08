@@ -150,36 +150,6 @@ const Dashboard = () => {
   // Terminal state
   const [terminalOpen, setTerminalOpen] = useState(false);
 
-  const terminal = useTerminal(user?.id, files, folders, {
-    onNavigateFolder: setCurrentFolderId,
-    onDownload: handleDownload,
-    onPreview: handlePreview,
-    onShare: handleShare,
-    onDelete: (id) => setDeleteFileId(id),
-    onRename: (id) => setRenameFileId(id),
-    onCreateFolder: handleCreateFolder,
-    onDeleteFolder: (id) => setDeleteFolderId(id),
-    onUploadClick: () => navigate('/upload'),
-    refreshData: loadData,
-  });
-
-  // Sync terminal folder state with dashboard
-  useEffect(() => {
-    terminal.syncFolderState(currentFolderId);
-  }, [currentFolderId, terminal.syncFolderState]);
-
-  // Global keyboard shortcut: Ctrl+`
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === '`') {
-        e.preventDefault();
-        setTerminalOpen(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
-
   // Folder lock dialog state
   const [lockFolderId, setLockFolderId] = useState<string | null>(null);
   const [lockAction, setLockAction] = useState<'lock' | 'unlock' | 'remove_lock' | 'change_password'>('lock');
