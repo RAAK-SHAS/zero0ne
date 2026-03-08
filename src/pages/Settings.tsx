@@ -64,6 +64,26 @@ const Settings = () => {
     }
   };
 
+  const handleChangeEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newEmail.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast.error('Please enter a valid email address'); return;
+    }
+    if (trimmed === user?.email) {
+      toast.error('This is already your current email'); return;
+    }
+    setEmailLoading(true);
+    const { error } = await supabase.auth.updateUser({ email: trimmed });
+    setEmailLoading(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('Confirmation sent to both old and new email. Please verify to complete the change.');
+      setNewEmail('');
+    }
+  };
+
   const initials = (profile?.name || user?.email)?.slice(0, 2).toUpperCase() || 'U';
 
   return (
