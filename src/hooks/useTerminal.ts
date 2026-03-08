@@ -83,6 +83,29 @@ export const useTerminal = (
     }]);
   }, []);
 
+  // Extract file names from piped output lines
+  const extractFileNamesFromPipedInput = (pipedLines: string[]): string[] => {
+    const names: string[] = [];
+    for (const line of pipedLines) {
+      // Parse lines like "  filename.ext  (size)  [folder]" or "  ★ 🔒 filename  size  date"
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      // Try to extract the first meaningful token (skip emoji/symbols)
+      const cleaned = trimmed.replace(/^[★🔒📁↓🗑\s]+/, '').trim();
+      // Get the file name part (before size/date info)
+      const nameMatch = cleaned.match(/^(.+?)\s{2,}/);
+      if (nameMatch) {
+        const candidate = nameMatch[1].trim().replace(/\/$/, '');
+        if (candidate) names.push(candidate);
+      } else {
+        // Fallback: just use the cleaned text up to first paren
+        const fallback = cleaned.split(/\s+\(/)[0].trim();
+        if (fallback) names.push(fallback);
+      }
+    }
+    return names;
+  };
+
   const formatSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';
     const k = 1024;
