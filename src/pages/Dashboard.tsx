@@ -595,7 +595,7 @@ const Dashboard = () => {
         )}
 
         {/* Mobile header */}
-        <header className="md:hidden border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+        <header className="md:hidden border-b border-border glass sticky top-0 z-40">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Cloud className="h-6 w-6 text-primary" />
@@ -603,50 +603,43 @@ const Dashboard = () => {
             </div>
             <div className="flex items-center gap-1">
               <GlobalUploadIndicator />
-              <ThemeToggle />
-              <Button variant="ghost" size="icon" onClick={signOut}>
-                <LogOut className="h-4 w-4" />
-              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setCmdOpen(true)}><Search className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" onClick={signOut}><LogOut className="h-4 w-4" /></Button>
             </div>
           </div>
         </header>
 
         {/* Desktop header bar */}
-        <header className="hidden md:flex border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+        <header className="hidden md:flex border-b border-border glass sticky top-0 z-40">
           <div className="flex-1 px-6 py-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{viewTitle}</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold">{viewTitle}</h2>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/30 border border-border">
+                <Terminal className="h-3 w-3 text-primary" />
+                <span className="terminal-text text-[10px]">&gt;_ SYS.READY</span>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setCmdOpen(true)} className="neon-border text-xs font-mono gap-2">
+                <Search className="h-3 w-3" />
+                <span className="hidden lg:inline">Search</span>
+                <kbd className="hidden lg:inline h-4 px-1 rounded bg-muted border border-border text-[9px]">⌘K</kbd>
+              </Button>
               <GlobalUploadIndicator />
-              
-              {/* Analytics Sheet */}
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <BarChart3 className="h-5 w-5" />
-                  </Button>
+                  <Button variant="ghost" size="icon"><BarChart3 className="h-5 w-5" /></Button>
                 </SheetTrigger>
                 <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
-                  <SheetHeader>
-                    <SheetTitle>Storage Analytics</SheetTitle>
-                  </SheetHeader>
+                  <SheetHeader><SheetTitle>Storage Analytics</SheetTitle></SheetHeader>
                   <div className="mt-6">
                     <Tabs defaultValue="analytics">
                       <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="analytics">
-                          <BarChart3 className="h-4 w-4 mr-2" />
-                          Storage
-                        </TabsTrigger>
-                        <TabsTrigger value="activity">
-                          <Activity className="h-4 w-4 mr-2" />
-                          Activity
-                        </TabsTrigger>
+                        <TabsTrigger value="analytics"><BarChart3 className="h-4 w-4 mr-2" />Storage</TabsTrigger>
+                        <TabsTrigger value="activity"><Activity className="h-4 w-4 mr-2" />Activity</TabsTrigger>
                       </TabsList>
-                      <TabsContent value="analytics" className="mt-4">
-                        <StorageAnalytics userId={user?.id} />
-                      </TabsContent>
-                      <TabsContent value="activity" className="mt-4">
-                        <ActivityPanel userId={user?.id} />
-                      </TabsContent>
+                      <TabsContent value="analytics" className="mt-4"><StorageAnalytics userId={user?.id} /></TabsContent>
+                      <TabsContent value="activity" className="mt-4"><ActivityPanel userId={user?.id} /></TabsContent>
                     </Tabs>
                   </div>
                 </SheetContent>
