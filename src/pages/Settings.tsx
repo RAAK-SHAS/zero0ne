@@ -25,6 +25,8 @@ const Settings = () => {
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [savingName, setSavingName] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
