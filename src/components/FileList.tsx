@@ -185,8 +185,8 @@ export const FileList = memo(({
             onDelete={onDelete} onRename={onRename} onPreview={onPreview}
             onEncrypt={onEncrypt} onVersionHistory={onVersionHistory}
             onExtractZip={onExtractZip} onToggleFavorite={onToggleFavorite}
+            onEdit={onEdit}
           />
-        ))}
       </div>
     </div>
   );
