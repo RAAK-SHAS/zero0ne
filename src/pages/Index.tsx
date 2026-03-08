@@ -1,37 +1,138 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { Cloud, Upload, Share2, Lock, Shield, Zap, Globe, ArrowRight, Check } from 'lucide-react';
+import { Cloud, Upload, Share2, Lock, Shield, Zap, Globe, ArrowRight, Check, Terminal } from 'lucide-react';
+
+const GeometricShape = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationId: number;
+    let time = 0;
+
+    const resize = () => {
+      canvas.width = canvas.offsetWidth * 2;
+      canvas.height = canvas.offsetHeight * 2;
+      ctx.scale(2, 2);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const draw = () => {
+      const w = canvas.offsetWidth;
+      const h = canvas.offsetHeight;
+      ctx.clearRect(0, 0, w, h);
+      time += 0.008;
+
+      const cx = w / 2;
+      const cy = h / 2;
+      const size = Math.min(w, h) * 0.28;
+
+      // Draw rotating geometric wireframe
+      for (let ring = 0; ring < 3; ring++) {
+        const ringSize = size * (0.6 + ring * 0.25);
+        const sides = 6 + ring * 2;
+        const rotOffset = time * (1 - ring * 0.3) + (ring * Math.PI / 4);
+        const alpha = 0.15 + ring * 0.08;
+
+        ctx.beginPath();
+        ctx.strokeStyle = `hsla(168, 100%, 50%, ${alpha})`;
+        ctx.lineWidth = 1;
+        ctx.shadowColor = 'hsla(168, 100%, 50%, 0.3)';
+        ctx.shadowBlur = 10;
+
+        for (let i = 0; i <= sides; i++) {
+          const angle = (i / sides) * Math.PI * 2 + rotOffset;
+          const wobble = Math.sin(time * 2 + i) * ringSize * 0.05;
+          const x = cx + Math.cos(angle) * (ringSize + wobble);
+          const y = cy + Math.sin(angle) * (ringSize + wobble);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      // Center dot
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsl(168, 100%, 50%)';
+      ctx.shadowColor = 'hsl(168, 100%, 50%)';
+      ctx.shadowBlur = 15;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Floating particles
+      for (let i = 0; i < 8; i++) {
+        const angle = time * 0.5 + (i * Math.PI * 2) / 8;
+        const dist = size * 1.2 + Math.sin(time * 2 + i) * 15;
+        const px = cx + Math.cos(angle) * dist;
+        const py = cy + Math.sin(angle) * dist;
+        ctx.beginPath();
+        ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(168, 100%, 50%, ${0.3 + Math.sin(time + i) * 0.2})`;
+        ctx.fill();
+      }
+
+      animationId = requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ opacity: 0.8 }}
+    />
+  );
+};
 
 const Index = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      navigate('/dashboard');
-    }
+    if (user) navigate('/dashboard');
   }, [user, navigate]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Grid background */}
+      <div className="fixed inset-0 pointer-events-none" style={{
+        backgroundImage: `linear-gradient(hsl(168 100% 50% / 0.03) 1px, transparent 1px), linear-gradient(90deg, hsl(168 100% 50% / 0.03) 1px, transparent 1px)`,
+        backgroundSize: '60px 60px',
+      }} />
+
       {/* Nav */}
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 glass">
+      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border glass">
         <div className="container mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl gradient-bg flex items-center justify-center">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl gradient-bg flex items-center justify-center neon-glow">
               <Cloud className="h-5 w-5 text-primary-foreground" />
             </div>
             <span className="text-lg font-bold tracking-tight">CloudStore</span>
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent/50 border border-border">
+              <Terminal className="h-3 w-3 text-primary" />
+              <span className="terminal-text text-[11px]">&gt;_ SYS.READY</span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
-            <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={() => navigate('/auth/login')}>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/auth/login')} className="text-muted-foreground hover:text-foreground">
               Sign In
             </Button>
-            <Button size="sm" onClick={() => navigate('/auth/register')} className="gradient-bg border-0 text-primary-foreground hover:opacity-90">
+            <Button size="sm" onClick={() => navigate('/auth/register')} className="gradient-bg border-0 text-primary-foreground hover:opacity-90 neon-glow">
               Get Started
               <ArrowRight className="h-4 w-4 ml-1" />
             </Button>
@@ -40,25 +141,27 @@ const Index = () => {
       </header>
 
       {/* Hero */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 relative overflow-hidden">
-        {/* Background effects */}
+      <section className="pt-32 pb-20 px-4 sm:px-6 relative">
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--gradient-hero)' }} />
-        <div className="absolute top-20 left-1/4 w-72 h-72 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute bottom-10 right-1/4 w-96 h-96 rounded-full bg-accent-foreground/5 blur-3xl" />
+        
+        {/* 3D Geometric Shape */}
+        <div className="absolute inset-0 pointer-events-none">
+          <GeometricShape />
+        </div>
 
         <div className="relative max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-8 animate-fade-up opacity-0">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full neon-border text-primary text-sm font-medium mb-8 animate-fade-up opacity-0">
             <Zap className="h-3.5 w-3.5" />
-            100TB free storage for everyone
+            <span className="terminal-text text-xs">100TB FREE STORAGE</span>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.08] mb-6 animate-fade-up opacity-0 stagger-1">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tight leading-[1.08] mb-6 animate-fade-up opacity-0 stagger-1">
             Your files.<br />
             <span className="gradient-text">Anywhere. Secure.</span>
           </h1>
 
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-up opacity-0 stagger-2">
-            Enterprise-grade cloud storage with end-to-end encryption, instant sharing, 
+            Enterprise-grade cloud storage with end-to-end encryption, instant sharing,
             and blazing-fast uploads. Built for people who care about their data.
           </p>
 
@@ -66,7 +169,7 @@ const Index = () => {
             <Button
               size="lg"
               onClick={() => navigate('/auth/register')}
-              className="gradient-bg border-0 text-primary-foreground hover:opacity-90 h-12 px-8 text-base font-semibold shadow-lg"
+              className="gradient-bg border-0 text-primary-foreground hover:opacity-90 h-12 px-8 text-base font-semibold neon-glow"
             >
               Start Free — No Card Required
               <ArrowRight className="h-4 w-4 ml-2" />
@@ -75,7 +178,7 @@ const Index = () => {
               size="lg"
               variant="outline"
               onClick={() => navigate('/auth/login')}
-              className="h-12 px-8 text-base font-semibold"
+              className="h-12 px-8 text-base font-semibold neon-border hover:bg-accent/50"
             >
               Sign In
             </Button>
@@ -84,7 +187,7 @@ const Index = () => {
       </section>
 
       {/* Stats */}
-      <section className="py-12 border-y border-border/50 bg-card/50">
+      <section className="py-12 border-y border-border glass">
         <div className="container mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
@@ -103,7 +206,7 @@ const Index = () => {
       </section>
 
       {/* Features */}
-      <section className="py-20 sm:py-28 px-4 sm:px-6">
+      <section className="py-20 sm:py-28 px-4 sm:px-6 relative">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
@@ -114,51 +217,21 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {[
-              {
-                icon: Upload,
-                title: 'Resumable Uploads',
-                description: 'Upload files up to 10GB+ with pause, resume, and automatic retry. Never lose progress.',
-                gradient: 'from-primary/10 to-primary/5',
-              },
-              {
-                icon: Share2,
-                title: 'Secure Sharing',
-                description: 'Generate password-protected links with custom expiration. Full control over who sees what.',
-                gradient: 'from-accent-foreground/10 to-accent-foreground/5',
-              },
-              {
-                icon: Shield,
-                title: 'End-to-End Encryption',
-                description: 'Military-grade AES-256 encryption. Your files are unreadable without your key.',
-                gradient: 'from-chart-4/10 to-chart-4/5',
-              },
-              {
-                icon: Zap,
-                title: 'Blazing Performance',
-                description: 'CDN-accelerated downloads, chunked uploads, and real-time sync across all devices.',
-                gradient: 'from-chart-5/10 to-chart-5/5',
-              },
-              {
-                icon: Lock,
-                title: 'Folder Protection',
-                description: 'Lock folders with passwords and hide them from view. Session-based access for convenience.',
-                gradient: 'from-destructive/10 to-destructive/5',
-              },
-              {
-                icon: Globe,
-                title: 'Access Anywhere',
-                description: 'Responsive design that works perfectly on desktop, tablet, and mobile. Your files follow you.',
-                gradient: 'from-chart-3/10 to-chart-3/5',
-              },
-            ].map(({ icon: Icon, title, description, gradient }) => (
+              { icon: Upload, title: 'Resumable Uploads', description: 'Upload files up to 10GB+ with pause, resume, and automatic retry. Never lose progress.' },
+              { icon: Share2, title: 'Secure Sharing', description: 'Generate password-protected links with custom expiration. Full control over who sees what.' },
+              { icon: Shield, title: 'End-to-End Encryption', description: 'Military-grade AES-256 encryption. Your files are unreadable without your key.' },
+              { icon: Zap, title: 'Blazing Performance', description: 'CDN-accelerated downloads, chunked uploads, and real-time sync across all devices.' },
+              { icon: Lock, title: 'Folder Protection', description: 'Lock folders with passwords and hide them from view. Session-based access for convenience.' },
+              { icon: Globe, title: 'Access Anywhere', description: 'Responsive design that works perfectly on desktop, tablet, and mobile. Your files follow you.' },
+            ].map(({ icon: Icon, title, description }) => (
               <div
                 key={title}
-                className="group relative bg-card rounded-2xl p-6 border border-border/50 hover:border-primary/30 transition-all duration-300 hover:shadow-lg"
+                className="group relative rounded-2xl p-6 neon-border bg-card/50 hover:bg-card transition-all duration-300 hover:neon-glow"
               >
-                <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${gradient} mb-4`}>
-                  <Icon className="h-6 w-6 text-foreground" />
+                <div className="inline-flex p-3 rounded-xl bg-primary/10 mb-4 group-hover:bg-primary/15 transition-colors">
+                  <Icon className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="text-lg font-semibold mb-2">{title}</h3>
                 <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
@@ -189,7 +262,7 @@ const Index = () => {
           <Button
             size="lg"
             onClick={() => navigate('/auth/register')}
-            className="gradient-bg border-0 text-primary-foreground hover:opacity-90 h-12 px-10 text-base font-semibold shadow-lg"
+            className="gradient-bg border-0 text-primary-foreground hover:opacity-90 h-12 px-10 text-base font-semibold neon-glow"
           >
             Get Started Free
             <ArrowRight className="h-4 w-4 ml-2" />
@@ -198,7 +271,7 @@ const Index = () => {
       </section>
 
       {/* Footer */}
-      <footer className="border-t py-8 px-4 sm:px-6">
+      <footer className="border-t border-border py-8 px-4 sm:px-6">
         <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-lg gradient-bg flex items-center justify-center">

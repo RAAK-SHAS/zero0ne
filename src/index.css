@@ -1,133 +1,88 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 220 20% 97%;
-    --foreground: 224 30% 12%;
+    /* CryptoLab Dark Theme - Teal Neon */
+    --background: 170 40% 3%;
+    --foreground: 165 15% 88%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 224 30% 12%;
+    --card: 170 30% 6%;
+    --card-foreground: 165 15% 88%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 30% 12%;
+    --popover: 170 30% 7%;
+    --popover-foreground: 165 15% 88%;
 
-    --primary: 243 75% 58%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 168 100% 50%;
+    --primary-foreground: 170 40% 3%;
 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 224 30% 12%;
+    --secondary: 170 20% 10%;
+    --secondary-foreground: 165 15% 88%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 10% 46%;
+    --muted: 170 15% 10%;
+    --muted-foreground: 170 10% 50%;
 
-    --accent: 243 75% 97%;
-    --accent-foreground: 243 75% 58%;
+    --accent: 168 50% 10%;
+    --accent-foreground: 168 100% 50%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 84% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 14% 91%;
-    --input: 220 14% 91%;
-    --ring: 243 75% 58%;
+    --border: 170 15% 12%;
+    --input: 170 15% 12%;
+    --ring: 168 100% 50%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 224 30% 12%;
-    --sidebar-primary: 243 75% 58%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 243 75% 97%;
-    --sidebar-accent-foreground: 243 75% 58%;
-    --sidebar-border: 220 14% 93%;
-    --sidebar-ring: 243 75% 58%;
-    --sidebar: 0 0% 100%;
+    --sidebar-background: 170 30% 4%;
+    --sidebar-foreground: 165 15% 88%;
+    --sidebar-primary: 168 100% 50%;
+    --sidebar-primary-foreground: 170 40% 3%;
+    --sidebar-accent: 168 50% 8%;
+    --sidebar-accent-foreground: 168 100% 50%;
+    --sidebar-border: 170 15% 10%;
+    --sidebar-ring: 168 100% 50%;
+    --sidebar: 170 30% 4%;
 
-    --chart-1: 243 75% 58%;
-    --chart-2: 258 90% 66%;
-    --chart-3: 280 85% 65%;
+    --chart-1: 168 100% 50%;
+    --chart-2: 155 90% 45%;
+    --chart-3: 180 80% 40%;
     --chart-4: 200 95% 50%;
-    --chart-5: 160 85% 45%;
+    --chart-5: 140 85% 45%;
 
-    /* Premium design tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(243, 75%, 58%) 0%, hsl(258, 90%, 66%) 50%, hsl(280, 85%, 65%) 100%);
-    --gradient-surface: linear-gradient(180deg, hsl(0, 0%, 100%) 0%, hsl(220, 20%, 97%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(243, 75%, 97%) 0%, hsl(258, 85%, 95%) 50%, hsl(280, 80%, 96%) 100%);
-    --shadow-elegant: 0 1px 3px hsl(0 0% 0% / 0.04), 0 4px 12px hsl(0 0% 0% / 0.06);
-    --shadow-elevated: 0 2px 8px hsl(0 0% 0% / 0.04), 0 8px 24px hsl(0 0% 0% / 0.08);
-    --shadow-glow: 0 0 0 1px hsl(243 75% 58% / 0.1), 0 4px 16px hsl(243 75% 58% / 0.12);
+    /* CryptoLab Premium Tokens */
+    --gradient-primary: linear-gradient(135deg, hsl(168, 100%, 50%) 0%, hsl(155, 90%, 45%) 50%, hsl(140, 85%, 45%) 100%);
+    --gradient-surface: linear-gradient(180deg, hsl(170, 30%, 6%) 0%, hsl(170, 40%, 3%) 100%);
+    --gradient-hero: radial-gradient(ellipse 80% 60% at 50% 20%, hsl(168, 100%, 50%, 0.08) 0%, transparent 70%);
+    --gradient-neon: linear-gradient(135deg, hsl(168, 100%, 50%) 0%, hsl(180, 100%, 50%) 100%);
+    --shadow-elegant: 0 1px 3px hsl(0 0% 0% / 0.3), 0 4px 12px hsl(0 0% 0% / 0.25);
+    --shadow-elevated: 0 2px 8px hsl(0 0% 0% / 0.3), 0 8px 24px hsl(0 0% 0% / 0.3);
+    --shadow-glow: 0 0 0 1px hsl(168 100% 50% / 0.15), 0 0 20px hsl(168 100% 50% / 0.08);
+    --shadow-neon: 0 0 10px hsl(168 100% 50% / 0.3), 0 0 40px hsl(168 100% 50% / 0.1);
     --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
     --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-    --shadow-2xs: 0 1px 2px 0px hsl(0 0% 0% / 0.03);
-    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.04);
-    --shadow-sm: 0 1px 3px hsl(0 0% 0% / 0.06), 0 1px 2px hsl(0 0% 0% / 0.04);
-    --shadow: 0 1px 3px hsl(0 0% 0% / 0.06), 0 2px 6px hsl(0 0% 0% / 0.04);
-    --shadow-md: 0 2px 4px hsl(0 0% 0% / 0.06), 0 4px 12px hsl(0 0% 0% / 0.06);
-    --shadow-lg: 0 4px 8px hsl(0 0% 0% / 0.06), 0 8px 24px hsl(0 0% 0% / 0.08);
-    --shadow-xl: 0 8px 16px hsl(0 0% 0% / 0.08), 0 16px 48px hsl(0 0% 0% / 0.1);
-    --shadow-2xl: 0 12px 24px hsl(0 0% 0% / 0.15);
+    --shadow-2xs: 0 1px 2px 0px hsl(0 0% 0% / 0.15);
+    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.2);
+    --shadow-sm: 0 1px 3px hsl(0 0% 0% / 0.25), 0 1px 2px hsl(0 0% 0% / 0.15);
+    --shadow: 0 1px 3px hsl(0 0% 0% / 0.25), 0 2px 6px hsl(0 0% 0% / 0.15);
+    --shadow-md: 0 2px 4px hsl(0 0% 0% / 0.25), 0 4px 12px hsl(0 0% 0% / 0.2);
+    --shadow-lg: 0 4px 8px hsl(0 0% 0% / 0.3), 0 8px 24px hsl(0 0% 0% / 0.25);
+    --shadow-xl: 0 8px 16px hsl(0 0% 0% / 0.3), 0 16px 48px hsl(0 0% 0% / 0.3);
+    --shadow-2xl: 0 12px 24px hsl(0 0% 0% / 0.4);
 
     --tracking-normal: -0.011em;
     --spacing: 0.25rem;
   }
 
+  /* Dark mode is now default — light mode override */
   .dark {
-    --background: 224 30% 8%;
-    --foreground: 210 20% 95%;
-
-    --card: 224 25% 12%;
-    --card-foreground: 210 20% 95%;
-
-    --popover: 224 25% 14%;
-    --popover-foreground: 210 20% 95%;
-
-    --primary: 243 80% 68%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 224 20% 16%;
-    --secondary-foreground: 210 20% 95%;
-
-    --muted: 224 20% 16%;
-    --muted-foreground: 220 10% 55%;
-
-    --accent: 243 40% 18%;
-    --accent-foreground: 243 80% 68%;
-
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 224 20% 18%;
-    --input: 224 20% 18%;
-    --ring: 243 80% 68%;
-
-    --sidebar-background: 224 28% 10%;
-    --sidebar-foreground: 210 20% 95%;
-    --sidebar-primary: 243 80% 68%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 243 40% 18%;
-    --sidebar-accent-foreground: 243 80% 68%;
-    --sidebar-border: 224 20% 16%;
-    --sidebar-ring: 243 80% 68%;
-    --sidebar: 224 28% 10%;
-
-    --chart-1: 243 80% 68%;
-    --chart-2: 258 85% 72%;
-    --chart-3: 280 80% 70%;
-    --chart-4: 200 90% 55%;
-    --chart-5: 160 80% 50%;
-
-    --gradient-primary: linear-gradient(135deg, hsl(243, 80%, 68%) 0%, hsl(258, 85%, 72%) 50%, hsl(280, 80%, 70%) 100%);
-    --gradient-surface: linear-gradient(180deg, hsl(224, 25%, 12%) 0%, hsl(224, 30%, 8%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(243, 40%, 14%) 0%, hsl(258, 35%, 14%) 50%, hsl(280, 30%, 14%) 100%);
-    --shadow-elegant: 0 1px 3px hsl(0 0% 0% / 0.2), 0 4px 12px hsl(0 0% 0% / 0.15);
-    --shadow-elevated: 0 2px 8px hsl(0 0% 0% / 0.2), 0 8px 24px hsl(0 0% 0% / 0.2);
-    --shadow-glow: 0 0 0 1px hsl(243 80% 68% / 0.15), 0 4px 16px hsl(243 80% 68% / 0.08);
+    /* Same as root — this IS the dark theme */
   }
 }
 
@@ -139,6 +94,22 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(170 15% 18%);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(168 100% 50% / 0.3);
   }
 }
 
@@ -152,6 +123,15 @@
 
   .gradient-bg {
     background: var(--gradient-primary);
+  }
+
+  .neon-glow {
+    box-shadow: var(--shadow-neon);
+  }
+
+  .neon-border {
+    border: 1px solid hsl(168 100% 50% / 0.2);
+    box-shadow: inset 0 0 20px hsl(168 100% 50% / 0.03), 0 0 20px hsl(168 100% 50% / 0.05);
   }
 
   .gradient-border {
@@ -177,8 +157,15 @@
   }
 
   .glass {
-    backdrop-filter: blur(12px) saturate(180%);
-    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: hsl(170 30% 5% / 0.7);
+  }
+
+  .glass-heavy {
+    backdrop-filter: blur(30px) saturate(200%);
+    -webkit-backdrop-filter: blur(30px) saturate(200%);
+    background: hsl(170 30% 4% / 0.85);
   }
 
   .animate-float {
@@ -188,6 +175,49 @@
   .animate-shimmer {
     animation: shimmer 2s linear infinite;
     background-size: 200% 100%;
+  }
+
+  .animate-pulse-neon {
+    animation: pulse-neon 2s ease-in-out infinite;
+  }
+
+  .animate-rotate-slow {
+    animation: rotate-slow 20s linear infinite;
+  }
+
+  .animate-glow {
+    animation: glow 3s ease-in-out infinite alternate;
+  }
+
+  .power-cell {
+    background: linear-gradient(90deg, 
+      hsl(168, 100%, 50%) 0%, 
+      hsl(155, 90%, 45%) 50%, 
+      hsl(140, 85%, 45%) 100%
+    );
+    box-shadow: 0 0 10px hsl(168 100% 50% / 0.4), 0 0 30px hsl(168 100% 50% / 0.15);
+    animation: power-pulse 2s ease-in-out infinite;
+  }
+
+  .terminal-text {
+    font-family: var(--font-mono);
+    color: hsl(168, 100%, 50%);
+    text-shadow: 0 0 8px hsl(168 100% 50% / 0.5);
+  }
+
+  .scan-line {
+    position: relative;
+    overflow: hidden;
+  }
+  .scan-line::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, hsl(168, 100%, 50%, 0.3), transparent);
+    animation: scan 4s linear infinite;
   }
 }
 
@@ -211,6 +241,36 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+@keyframes pulse-neon {
+  0%, 100% { box-shadow: 0 0 5px hsl(168 100% 50% / 0.3), 0 0 20px hsl(168 100% 50% / 0.1); }
+  50% { box-shadow: 0 0 15px hsl(168 100% 50% / 0.5), 0 0 40px hsl(168 100% 50% / 0.2); }
+}
+
+@keyframes power-pulse {
+  0%, 100% { opacity: 1; filter: brightness(1); }
+  50% { opacity: 0.9; filter: brightness(1.2); }
+}
+
+@keyframes rotate-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes glow {
+  from { filter: drop-shadow(0 0 5px hsl(168 100% 50% / 0.3)); }
+  to { filter: drop-shadow(0 0 15px hsl(168 100% 50% / 0.5)); }
+}
+
+@keyframes scan {
+  0% { top: -2px; }
+  100% { top: 100%; }
+}
+
+@keyframes grid-pulse {
+  0%, 100% { opacity: 0.02; }
+  50% { opacity: 0.05; }
+}
+
 .animate-fade-up {
   animation: fade-up 0.5s ease-out forwards;
 }
@@ -223,3 +283,4 @@
 .stagger-2 { animation-delay: 0.2s; }
 .stagger-3 { animation-delay: 0.3s; }
 .stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
