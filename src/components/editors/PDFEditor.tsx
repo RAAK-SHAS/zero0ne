@@ -38,7 +38,7 @@ const COLORS = [
 ];
 
 export const PDFEditor = ({ file, fileUrl, open, onClose }: PDFEditorProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<Tool>('select');
   const [color, setColor] = useState(COLORS[0]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
