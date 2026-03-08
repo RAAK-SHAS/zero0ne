@@ -203,6 +203,7 @@ export const FileGrid = memo(({
           onToggleFavorite={onToggleFavorite}
           onEdit={onEdit}
         />
+      ))}
     </div>
   );
 });
