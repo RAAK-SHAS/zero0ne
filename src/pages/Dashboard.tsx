@@ -656,10 +656,6 @@ const Dashboard = () => {
           <div className="flex-1 px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-semibold">{viewTitle}</h2>
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/30 border border-border">
-                <Terminal className="h-3 w-3 text-primary" />
-                <span className="terminal-text text-[10px]">&gt;_ SYS.READY</span>
-              </div>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setCmdOpen(true)} className="neon-border text-xs font-mono gap-2">
