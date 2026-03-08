@@ -992,6 +992,38 @@ const Dashboard = () => {
           loadData();
         }}
       />
+
+      {/* Editors */}
+      <PDFEditor
+        file={editType === 'pdf' ? editFile : null}
+        fileUrl={editType === 'pdf' ? editFileUrl : null}
+        open={editType === 'pdf'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+      />
+      <VideoEditor
+        file={editType === 'video' ? editFile : null}
+        fileUrl={editType === 'video' ? editFileUrl : null}
+        open={editType === 'video'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+      />
+      <AudioEditor
+        file={editType === 'audio' ? editFile : null}
+        fileUrl={editType === 'audio' ? editFileUrl : null}
+        open={editType === 'audio'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+      />
+      <ImageEditor
+        file={editType === 'image' ? editFile : null}
+        fileUrl={editType === 'image' ? editFileUrl : null}
+        open={editType === 'image'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+      />
+      <MarkdownEditor
+        file={editType === 'markdown' ? editFile : null}
+        fileUrl={editType === 'markdown' ? editFileUrl : null}
+        open={editType === 'markdown'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+      />
     </div>
   );
 };
