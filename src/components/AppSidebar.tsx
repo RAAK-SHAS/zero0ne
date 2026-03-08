@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
-  Cloud, FolderOpen, Clock, Trash2, Settings, LogOut, Upload, Share2, Plus, Terminal,
+  Cloud, FolderOpen, Clock, Trash2, Settings, LogOut, Upload, Share2, Plus,
 } from 'lucide-react';
 
 interface AppSidebarProps {
