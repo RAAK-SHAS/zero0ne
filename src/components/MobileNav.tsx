@@ -16,8 +16,8 @@ export const MobileNav = () => {
   const currentPath = location.pathname + location.search;
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 bg-card/95 glass safe-area-bottom">
-      <div className="flex items-center justify-around py-1.5 px-2">
+    <nav className="md:hidden fixed bottom-4 left-4 right-4 z-50 rounded-2xl neon-border glass-heavy safe-area-bottom">
+      <div className="flex items-center justify-around py-2 px-2">
         {items.map(({ icon: Icon, label, path }) => {
           const active = path === '/dashboard'
             ? location.pathname === '/dashboard' && !location.search.includes('view=')
@@ -28,11 +28,14 @@ export const MobileNav = () => {
               key={path}
               onClick={() => navigate(path)}
               className={cn(
-                'flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 min-w-0',
-                active ? 'text-primary' : 'text-muted-foreground'
+                'flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-[11px] font-medium transition-all duration-200 min-w-0',
+                active ? 'text-primary bg-primary/10' : 'text-muted-foreground'
               )}
             >
-              <Icon className={cn("h-5 w-5 transition-transform", active && "scale-110")} />
+              <Icon className={cn(
+                "h-5 w-5 transition-all",
+                active && "scale-110 drop-shadow-[0_0_6px_hsl(168,100%,50%,0.5)]"
+              )} />
               <span>{label}</span>
             </button>
           );

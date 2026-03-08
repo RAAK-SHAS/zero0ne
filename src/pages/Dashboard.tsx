@@ -36,44 +36,24 @@ import { FileTypeFilter, FileTypeCategory, getFileTypeCategory } from '@/compone
 import { SortControl, SortConfig } from '@/components/SortControl';
 import { AppSidebar } from '@/components/AppSidebar';
 import { MobileNav } from '@/components/MobileNav';
+import { CommandPalette, useCommandPalette } from '@/components/CommandPalette';
+import { SystemLog, useSystemLog } from '@/components/SystemLog';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
 import { 
-  Upload, 
-  Cloud, 
-  LogOut, 
-  Trash2, 
-  FolderPlus, 
-  Star, 
-  BarChart3,
-  Activity,
-  EyeOff,
-  Menu
+  Upload, Cloud, LogOut, Trash2, FolderPlus, Star, BarChart3,
+  Activity, EyeOff, Menu, Terminal, Search
 } from 'lucide-react';
 import JSZip from 'jszip';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDropzone } from 'react-dropzone';
@@ -136,6 +116,8 @@ const Dashboard = () => {
   const { downloadFile, downloadMultipleAsZip } = useDownloadManager();
   const { toggleFavorite } = useFavorites();
   const { logActivity } = useActivityLog(user?.id);
+  const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
+  const { logs: systemLogs, addLog } = useSystemLog();
   
   const {
     folders,
@@ -582,7 +564,12 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-background to-accent/20">
+    <div className="flex h-screen bg-background relative">
+      {/* Grid background */}
+      <div className="fixed inset-0 pointer-events-none" style={{
+        backgroundImage: `linear-gradient(hsl(168 100% 50% / 0.02) 1px, transparent 1px), linear-gradient(90deg, hsl(168 100% 50% / 0.02) 1px, transparent 1px)`,
+        backgroundSize: '60px 60px',
+      }} />
       {/* Sidebar - desktop */}
       <AppSidebar
         storageUsed={profile?.storage_used_bytes || 0}
@@ -608,7 +595,7 @@ const Dashboard = () => {
         )}
 
         {/* Mobile header */}
-        <header className="md:hidden border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+        <header className="md:hidden border-b border-border glass sticky top-0 z-40">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Cloud className="h-6 w-6 text-primary" />
@@ -616,50 +603,43 @@ const Dashboard = () => {
             </div>
             <div className="flex items-center gap-1">
               <GlobalUploadIndicator />
-              <ThemeToggle />
-              <Button variant="ghost" size="icon" onClick={signOut}>
-                <LogOut className="h-4 w-4" />
-              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setCmdOpen(true)}><Search className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" onClick={signOut}><LogOut className="h-4 w-4" /></Button>
             </div>
           </div>
         </header>
 
         {/* Desktop header bar */}
-        <header className="hidden md:flex border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+        <header className="hidden md:flex border-b border-border glass sticky top-0 z-40">
           <div className="flex-1 px-6 py-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{viewTitle}</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold">{viewTitle}</h2>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/30 border border-border">
+                <Terminal className="h-3 w-3 text-primary" />
+                <span className="terminal-text text-[10px]">&gt;_ SYS.READY</span>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setCmdOpen(true)} className="neon-border text-xs font-mono gap-2">
+                <Search className="h-3 w-3" />
+                <span className="hidden lg:inline">Search</span>
+                <kbd className="hidden lg:inline h-4 px-1 rounded bg-muted border border-border text-[9px]">⌘K</kbd>
+              </Button>
               <GlobalUploadIndicator />
-              
-              {/* Analytics Sheet */}
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <BarChart3 className="h-5 w-5" />
-                  </Button>
+                  <Button variant="ghost" size="icon"><BarChart3 className="h-5 w-5" /></Button>
                 </SheetTrigger>
                 <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
-                  <SheetHeader>
-                    <SheetTitle>Storage Analytics</SheetTitle>
-                  </SheetHeader>
+                  <SheetHeader><SheetTitle>Storage Analytics</SheetTitle></SheetHeader>
                   <div className="mt-6">
                     <Tabs defaultValue="analytics">
                       <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="analytics">
-                          <BarChart3 className="h-4 w-4 mr-2" />
-                          Storage
-                        </TabsTrigger>
-                        <TabsTrigger value="activity">
-                          <Activity className="h-4 w-4 mr-2" />
-                          Activity
-                        </TabsTrigger>
+                        <TabsTrigger value="analytics"><BarChart3 className="h-4 w-4 mr-2" />Storage</TabsTrigger>
+                        <TabsTrigger value="activity"><Activity className="h-4 w-4 mr-2" />Activity</TabsTrigger>
                       </TabsList>
-                      <TabsContent value="analytics" className="mt-4">
-                        <StorageAnalytics userId={user?.id} />
-                      </TabsContent>
-                      <TabsContent value="activity" className="mt-4">
-                        <ActivityPanel userId={user?.id} />
-                      </TabsContent>
+                      <TabsContent value="analytics" className="mt-4"><StorageAnalytics userId={user?.id} /></TabsContent>
+                      <TabsContent value="activity" className="mt-4"><ActivityPanel userId={user?.id} /></TabsContent>
                     </Tabs>
                   </div>
                 </SheetContent>
@@ -671,16 +651,12 @@ const Dashboard = () => {
         <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
           <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
             {/* Storage bar - mobile only */}
-            <div className="md:hidden bg-card rounded-lg p-4 shadow-lg">
-              <StorageBar
-                used={profile?.storage_used_bytes || 0}
-                total={profile?.storage_quota_bytes || 109951162777600}
-              />
+            <div className="md:hidden neon-border rounded-lg p-4 bg-card/50 glass">
+              <StorageBar used={profile?.storage_used_bytes || 0} total={profile?.storage_quota_bytes || 109951162777600} />
             </div>
 
-            {/* Folder navigation - only in files view */}
             {currentView === 'files' && (currentFolderId || folders.length > 0) && (
-              <div className="bg-card rounded-lg px-4 py-2 shadow-lg">
+              <div className="neon-border rounded-lg px-4 py-2 bg-card/50 glass">
                 <FolderBreadcrumb path={currentPath} onNavigate={setCurrentFolderId} />
               </div>
             )}
@@ -755,7 +731,7 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <div className="bg-card rounded-lg p-4 md:p-6 shadow-lg">
+            <div className="neon-border rounded-lg p-4 md:p-6 bg-card/30 glass">
               {/* Folders - only in files view */}
               {currentView === 'files' && (
                 <FolderGrid
@@ -814,12 +790,17 @@ const Dashboard = () => {
                 />
               )}
             </div>
+
+            {/* System Log */}
+            <SystemLog logs={systemLogs} />
           </div>
         </main>
 
-        {/* Mobile nav */}
         <MobileNav />
       </div>
+
+      {/* Command Palette */}
+      <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} onSearch={setSearchQuery} />
 
       {selectedFiles.length > 0 && (
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-40">

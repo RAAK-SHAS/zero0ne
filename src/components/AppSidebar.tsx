@@ -8,15 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
-  Cloud,
-  FolderOpen,
-  Clock,
-  Trash2,
-  Settings,
-  LogOut,
-  Upload,
-  Share2,
-  Plus,
+  Cloud, FolderOpen, Clock, Trash2, Settings, LogOut, Upload, Share2, Plus, Terminal,
 } from 'lucide-react';
 
 interface AppSidebarProps {
@@ -37,10 +29,10 @@ const NavItem = ({ icon: Icon, label, active, onClick }: NavItemProps) => (
   <button
     onClick={onClick}
     className={cn(
-      'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+      'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
       active
-        ? 'bg-primary/10 text-primary shadow-sm'
-        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        ? 'bg-primary/10 text-primary neon-border'
+        : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
     )}
   >
     <Icon className={cn("h-[18px] w-[18px] shrink-0", active && "text-primary")} />
@@ -62,22 +54,31 @@ export const AppSidebar = ({ storageUsed, storageTotal, onUploadClick, onNewFold
   const initials = user?.email?.slice(0, 2).toUpperCase() || 'U';
 
   return (
-    <aside className="hidden md:flex flex-col w-[260px] border-r border-border/60 bg-card h-screen sticky top-0">
+    <aside className="hidden md:flex flex-col w-[260px] border-r border-border glass-heavy h-screen sticky top-0">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-border/60 shrink-0">
-        <div className="h-8 w-8 rounded-lg gradient-bg flex items-center justify-center">
+      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-border shrink-0">
+        <div className="h-8 w-8 rounded-lg gradient-bg flex items-center justify-center neon-glow">
           <Cloud className="h-4 w-4 text-primary-foreground" />
         </div>
         <span className="text-base font-bold tracking-tight">CloudStore</span>
       </div>
 
+      {/* System status */}
+      <div className="px-4 pt-3 pb-1 shrink-0">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/30 border border-border">
+          <Terminal className="h-3 w-3 text-primary" />
+          <span className="terminal-text text-[10px]">&gt;_ SYS.READY</span>
+          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary animate-pulse-neon" />
+        </div>
+      </div>
+
       {/* Action buttons */}
-      <div className="px-3 pt-4 pb-2 space-y-1.5 shrink-0">
-        <Button onClick={onUploadClick} className="w-full justify-start gap-2.5 h-10 gradient-bg border-0 text-primary-foreground hover:opacity-90 font-medium shadow-sm">
+      <div className="px-3 pt-3 pb-2 space-y-1.5 shrink-0">
+        <Button onClick={onUploadClick} className="w-full justify-start gap-2.5 h-10 gradient-bg border-0 text-primary-foreground hover:opacity-90 font-medium neon-glow">
           <Upload className="h-4 w-4" />
           Upload Files
         </Button>
-        <Button variant="outline" onClick={onNewFolderClick} className="w-full justify-start gap-2.5 h-9 text-sm font-medium">
+        <Button variant="outline" onClick={onNewFolderClick} className="w-full justify-start gap-2.5 h-9 text-sm font-medium neon-border hover:bg-accent/50">
           <Plus className="h-4 w-4" />
           New Folder
         </Button>
@@ -89,55 +90,28 @@ export const AppSidebar = ({ storageUsed, storageTotal, onUploadClick, onNewFold
           <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             Browse
           </p>
-          <NavItem
-            icon={FolderOpen}
-            label="My Files"
-            active={isActive('/dashboard')}
-            onClick={() => navigate('/dashboard')}
-          />
-          <NavItem
-            icon={Clock}
-            label="Recent"
-            active={isActive('view=recent')}
-            onClick={() => navigate('/dashboard?view=recent')}
-          />
-          <NavItem
-            icon={Share2}
-            label="Shared"
-            active={isActive('view=shared')}
-            onClick={() => navigate('/dashboard?view=shared')}
-          />
-          <NavItem
-            icon={Trash2}
-            label="Trash"
-            active={isActive('/trash')}
-            onClick={() => navigate('/trash')}
-          />
+          <NavItem icon={FolderOpen} label="My Files" active={isActive('/dashboard')} onClick={() => navigate('/dashboard')} />
+          <NavItem icon={Clock} label="Recent" active={isActive('view=recent')} onClick={() => navigate('/dashboard?view=recent')} />
+          <NavItem icon={Share2} label="Shared" active={isActive('view=shared')} onClick={() => navigate('/dashboard?view=shared')} />
+          <NavItem icon={Trash2} label="Trash" active={isActive('/trash')} onClick={() => navigate('/trash')} />
         </div>
-
-        <Separator className="my-4" />
-
+        <Separator className="my-4 bg-border" />
         <div className="space-y-0.5">
           <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             Account
           </p>
-          <NavItem
-            icon={Settings}
-            label="Settings"
-            active={isActive('/settings')}
-            onClick={() => navigate('/settings')}
-          />
+          <NavItem icon={Settings} label="Settings" active={isActive('/settings')} onClick={() => navigate('/settings')} />
         </div>
       </ScrollArea>
 
       {/* Storage + user */}
-      <div className="border-t border-border/60 p-3 space-y-3 shrink-0">
+      <div className="border-t border-border p-3 space-y-3 shrink-0">
         <div className="px-1">
           <StorageBar used={storageUsed} total={storageTotal} compact />
         </div>
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2.5 min-w-0">
-            <Avatar className="h-7 w-7">
+            <Avatar className="h-7 w-7 ring-1 ring-primary/30">
               <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
                 {initials}
               </AvatarFallback>

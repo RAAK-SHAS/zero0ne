@@ -6,11 +6,7 @@ import { FileIcon } from '@/components/FileIcon';
 import { TagDisplay } from '@/components/TagManager';
 import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +37,21 @@ interface FileGridProps {
   onToggleFavorite?: (fileId: string, current: boolean) => void;
 }
 
+// Generate AI-like auto tag from mime type
+const getAutoTag = (name: string, mimeType: string | null): string | null => {
+  if (!mimeType && !name) return null;
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (mimeType?.startsWith('image/')) return 'IMAGE';
+  if (mimeType?.startsWith('video/')) return 'VIDEO';
+  if (mimeType?.startsWith('audio/')) return 'AUDIO';
+  if (mimeType === 'application/pdf' || ext === 'pdf') return 'DOCUMENT';
+  if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext || '')) return 'OFFICE';
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext || '')) return 'ARCHIVE';
+  if (['js', 'ts', 'py', 'java', 'cpp', 'go', 'rs'].includes(ext || '')) return 'CODE';
+  if (['json', 'xml', 'csv', 'yaml'].includes(ext || '')) return 'DATA';
+  return null;
+};
+
 const FileCard = memo(({
   file, isSelected, onSelectFile, onDownload, onShare, onDelete, onRename,
   onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite,
@@ -59,6 +70,7 @@ const FileCard = memo(({
   onToggleFavorite?: (fileId: string, current: boolean) => void;
 }) => {
   const isArchive = /\.(zip|rar|7z|tar|gz|bz2|xz|tgz)$/i.test(file.name);
+  const autoTag = getAutoTag(file.name, file.mime_type);
 
   const handleSelect = useCallback(() => onSelectFile(file.id), [file.id, onSelectFile]);
   const handlePreview = useCallback(() => onPreview(file.id), [file.id, onPreview]);
@@ -70,23 +82,17 @@ const FileCard = memo(({
   return (
     <div
       className={cn(
-        "group relative bg-card border border-border/60 rounded-xl p-4 cursor-pointer transition-all duration-200",
-        "hover:shadow-md hover:border-primary/30",
-        isSelected && "ring-2 ring-primary/50 border-primary/30 shadow-md"
+        "group relative rounded-xl p-4 cursor-pointer transition-all duration-300",
+        "bg-card/50 neon-border hover:bg-card hover:neon-glow",
+        isSelected && "ring-1 ring-primary/50 bg-primary/5"
       )}
       onClick={handleSelect}
       onDoubleClick={handlePreview}
     >
       {/* Favorite */}
       {onToggleFavorite && (
-        <button
-          onClick={handleFavoriteClick}
-          className="absolute top-3 left-3 z-10 transition-all duration-200 hover:scale-110"
-        >
-          <Star className={cn(
-            "h-4 w-4 transition-all",
-            file.is_favorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/20 hover:text-amber-400"
-          )} />
+        <button onClick={handleFavoriteClick} className="absolute top-3 left-3 z-10 transition-all duration-200 hover:scale-110">
+          <Star className={cn("h-4 w-4 transition-all", file.is_favorite ? "fill-primary text-primary" : "text-muted-foreground/20 hover:text-primary")} />
         </button>
       )}
 
@@ -94,7 +100,7 @@ const FileCard = memo(({
       <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="secondary" size="icon" className="h-7 w-7 shadow-sm bg-card/90 glass">
+            <Button variant="secondary" size="icon" className="h-7 w-7 shadow-sm bg-card glass">
               <MoreHorizontal className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
@@ -115,7 +121,7 @@ const FileCard = memo(({
 
       {/* Icon */}
       <div className="flex justify-center mb-3 pt-2">
-        <div className="h-14 w-14 rounded-xl bg-muted/50 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+        <div className="h-14 w-14 rounded-xl bg-accent/30 flex items-center justify-center group-hover:bg-primary/10 transition-colors neon-border">
           <FileIcon fileName={file.name} mimeType={file.mime_type} storagePath={file.storage_path} showThumbnail className="h-7 w-7" />
         </div>
       </div>
@@ -130,17 +136,27 @@ const FileCard = memo(({
         </div>
       </div>
 
+      {/* AI Auto Tag */}
+      {autoTag && (
+        <div className="mt-2 flex justify-center">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-mono text-primary">
+            <span className="h-1 w-1 rounded-full bg-primary animate-pulse-neon" />
+            AUTO: {autoTag}
+          </span>
+        </div>
+      )}
+
       {/* Tags */}
       {file.tags && file.tags.length > 0 && (
-        <div className="mt-2.5 flex justify-center">
+        <div className="mt-1.5 flex justify-center">
           <TagDisplay tags={file.tags} maxVisible={2} />
         </div>
       )}
 
-      {/* Status */}
+      {/* Status indicators */}
       <div className="absolute bottom-3 right-3 flex items-center gap-1">
-        {file.is_encrypted && <div className="p-1 rounded-md bg-amber-500/10"><Lock className="h-3 w-3 text-amber-500" /></div>}
-        {isArchive && <div className="p-1 rounded-md bg-primary/10"><Archive className="h-3 w-3 text-primary" /></div>}
+        {file.is_encrypted && <div className="p-1 rounded-md bg-primary/10"><Lock className="h-3 w-3 text-primary" /></div>}
+        {isArchive && <div className="p-1 rounded-md bg-accent"><Archive className="h-3 w-3 text-primary" /></div>}
       </div>
     </div>
   );
@@ -155,7 +171,7 @@ export const FileGrid = memo(({
   if (files.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+        <div className="h-16 w-16 rounded-2xl bg-accent/30 neon-border flex items-center justify-center mb-4">
           <Archive className="h-8 w-8 text-muted-foreground/50" />
         </div>
         <p className="text-muted-foreground font-medium">No files in this folder</p>

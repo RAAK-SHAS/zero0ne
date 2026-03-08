@@ -1,18 +1,10 @@
 import { Folder, MoreHorizontal, Trash2, Edit2, EyeOff, Eye, Lock, Unlock, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
+  ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import type { Folder as FolderType } from '@/hooks/useFolders';
 import { cn } from '@/lib/utils';
@@ -46,21 +38,15 @@ export const FolderGrid = ({
 
   const menuItems = (folder: FolderType) => (
     <>
-      <ContextMenuItem onClick={() => handleOpen(folder)}>
-        <Folder className="h-4 w-4 mr-2" /> Open
-      </ContextMenuItem>
-      <ContextMenuItem onClick={() => onRename(folder.id)}>
-        <Edit2 className="h-4 w-4 mr-2" /> Rename
-      </ContextMenuItem>
+      <ContextMenuItem onClick={() => handleOpen(folder)}><Folder className="h-4 w-4 mr-2" /> Open</ContextMenuItem>
+      <ContextMenuItem onClick={() => onRename(folder.id)}><Edit2 className="h-4 w-4 mr-2" /> Rename</ContextMenuItem>
       <ContextMenuSeparator />
       {onToggleHidden && (
         <ContextMenuItem onClick={() => onToggleHidden(folder.id, folder.is_hidden)}>
           {folder.is_hidden ? <><Eye className="h-4 w-4 mr-2" /> Unhide</> : <><EyeOff className="h-4 w-4 mr-2" /> Hide</>}
         </ContextMenuItem>
       )}
-      {!folder.is_locked && onLock && (
-        <ContextMenuItem onClick={() => onLock(folder.id)}><Lock className="h-4 w-4 mr-2" /> Lock</ContextMenuItem>
-      )}
+      {!folder.is_locked && onLock && <ContextMenuItem onClick={() => onLock(folder.id)}><Lock className="h-4 w-4 mr-2" /> Lock</ContextMenuItem>}
       {folder.is_locked && (
         <>
           {onChangePassword && <ContextMenuItem onClick={() => onChangePassword(folder.id)}><KeyRound className="h-4 w-4 mr-2" /> Change Password</ContextMenuItem>}
@@ -68,9 +54,7 @@ export const FolderGrid = ({
         </>
       )}
       <ContextMenuSeparator />
-      <ContextMenuItem onClick={() => onDelete(folder.id)} className="text-destructive">
-        <Trash2 className="h-4 w-4 mr-2" /> Delete
-      </ContextMenuItem>
+      <ContextMenuItem onClick={() => onDelete(folder.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete</ContextMenuItem>
     </>
   );
 
@@ -81,10 +65,10 @@ export const FolderGrid = ({
           <ContextMenuTrigger>
             <div
               className={cn(
-                "group relative rounded-xl p-4 cursor-pointer transition-all duration-200 border border-transparent",
+                "group relative rounded-xl p-4 cursor-pointer transition-all duration-300",
                 folder.is_hidden
-                  ? "bg-muted/30 hover:bg-muted/50 opacity-50"
-                  : "bg-muted/50 hover:bg-muted hover:border-primary/20 hover:shadow-sm"
+                  ? "bg-muted/20 neon-border opacity-40 hover:opacity-70"
+                  : "bg-card/50 neon-border hover:bg-card hover:neon-glow"
               )}
               onDoubleClick={() => handleOpen(folder)}
             >
@@ -94,13 +78,10 @@ export const FolderGrid = ({
                     "h-12 w-12 rounded-xl flex items-center justify-center transition-colors",
                     folder.is_hidden ? "bg-muted-foreground/10" : "bg-primary/10"
                   )}>
-                    <Folder className={cn(
-                      "h-6 w-6",
-                      folder.is_hidden ? "text-muted-foreground" : "text-primary"
-                    )} />
+                    <Folder className={cn("h-6 w-6", folder.is_hidden ? "text-muted-foreground" : "text-primary")} />
                   </div>
                   {folder.is_locked && (
-                    <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-destructive/10 flex items-center justify-center">
+                    <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-destructive/20 flex items-center justify-center">
                       <Lock className="h-3 w-3 text-destructive" />
                     </div>
                   )}
@@ -110,17 +91,13 @@ export const FolderGrid = ({
                     </div>
                   )}
                 </div>
-                <span className="text-sm font-medium truncate w-full text-center">
-                  {folder.name}
-                </span>
+                <span className="text-sm font-medium truncate w-full text-center">{folder.name}</span>
               </div>
 
               <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                      <MoreHorizontal className="h-3.5 w-3.5" />
-                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-3.5 w-3.5" /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => handleOpen(folder)}><Folder className="h-4 w-4 mr-2" /> Open</DropdownMenuItem>
@@ -131,9 +108,7 @@ export const FolderGrid = ({
                         {folder.is_hidden ? <><Eye className="h-4 w-4 mr-2" /> Unhide</> : <><EyeOff className="h-4 w-4 mr-2" /> Hide</>}
                       </DropdownMenuItem>
                     )}
-                    {!folder.is_locked && onLock && (
-                      <DropdownMenuItem onClick={() => onLock(folder.id)}><Lock className="h-4 w-4 mr-2" /> Lock</DropdownMenuItem>
-                    )}
+                    {!folder.is_locked && onLock && <DropdownMenuItem onClick={() => onLock(folder.id)}><Lock className="h-4 w-4 mr-2" /> Lock</DropdownMenuItem>}
                     {folder.is_locked && (
                       <>
                         {onChangePassword && <DropdownMenuItem onClick={() => onChangePassword(folder.id)}><KeyRound className="h-4 w-4 mr-2" /> Change Password</DropdownMenuItem>}
@@ -141,17 +116,13 @@ export const FolderGrid = ({
                       </>
                     )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => onDelete(folder.id)} className="text-destructive">
-                      <Trash2 className="h-4 w-4 mr-2" /> Delete
-                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onDelete(folder.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </div>
           </ContextMenuTrigger>
-          <ContextMenuContent>
-            {menuItems(folder)}
-          </ContextMenuContent>
+          <ContextMenuContent>{menuItems(folder)}</ContextMenuContent>
         </ContextMenu>
       ))}
     </div>
