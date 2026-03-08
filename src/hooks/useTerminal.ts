@@ -233,13 +233,13 @@ Available Commands:
         }
 
         case 'pwd': {
-          addLine('output', getPathString());
+          collectLine('output', getPathString());
           break;
         }
 
         case 'whoami': {
           const { data } = await supabase.from('profiles').select('email, name').eq('id', userId!).single();
-          addLine('output', `User: ${data?.name || data?.email || userId}`);
+          collectLine('output', `User: ${data?.name || data?.email || userId}`);
           break;
         }
 
@@ -247,17 +247,17 @@ Available Commands:
           const { data } = await supabase.from('profiles').select('storage_used_bytes, storage_quota_bytes').eq('id', userId!).single();
           if (data) {
             const usedPct = ((data.storage_used_bytes / data.storage_quota_bytes) * 100).toFixed(1);
-            addLine('output', `Disk Usage: ${formatSize(data.storage_used_bytes)} / ${formatSize(data.storage_quota_bytes)} (${usedPct}%)`);
+            collectLine('output', `Disk Usage: ${formatSize(data.storage_used_bytes)} / ${formatSize(data.storage_quota_bytes)} (${usedPct}%)`);
           }
           break;
         }
 
         case 'history': {
           if (commandHistory.length === 0) {
-            addLine('info', 'No command history');
+            collectLine('info', 'No command history');
           } else {
             const hist = commandHistory.slice(-20).map((cmd, i) => `  ${i + 1}  ${cmd}`).join('\n');
-            addLine('output', hist);
+            collectLine('output', hist);
           }
           break;
         }
@@ -267,7 +267,7 @@ Available Commands:
           const currentFiles = getCurrentFolderFiles();
           
           if (subfolders.length === 0 && currentFiles.length === 0) {
-            addLine('info', 'Directory is empty');
+            collectLine('info', 'Directory is empty');
             break;
           }
 
@@ -289,8 +289,8 @@ Available Commands:
             }).join('\n');
           }
           
-          addLine('output', output);
-          addLine('info', `${subfolders.length} folder(s), ${currentFiles.length} file(s)`);
+          collectLine('output', output);
+          collectLine('info', `${subfolders.length} folder(s), ${currentFiles.length} file(s)`);
           break;
         }
 
@@ -299,24 +299,24 @@ Available Commands:
             termState.current.currentFolderId = null;
             termState.current.currentPath = ['/'];
             callbacks.onNavigateFolder(null);
-            addLine('success', `Changed to /`);
+            collectLine('success', `Changed to /`);
           } else if (args[0] === '..') {
             if (termState.current.currentFolderId) {
               const currentFolder = folders.find(f => f.id === termState.current.currentFolderId);
               termState.current.currentFolderId = currentFolder?.parent_id || null;
               callbacks.onNavigateFolder(termState.current.currentFolderId);
-              addLine('success', `Changed to ${getPathString()}`);
+              collectLine('success', `Changed to ${getPathString()}`);
             } else {
-              addLine('info', 'Already at root directory');
+              collectLine('info', 'Already at root directory');
             }
           } else {
             const targetFolder = resolveFolderName(args.join(' '));
             if (targetFolder) {
               termState.current.currentFolderId = targetFolder.id;
               callbacks.onNavigateFolder(targetFolder.id);
-              addLine('success', `Changed to ${getPathString()}`);
+              collectLine('success', `Changed to ${getPathString()}`);
             } else {
-              addLine('error', `cd: no such directory: ${args.join(' ')}`);
+              collectLine('error', `cd: no such directory: ${args.join(' ')}`);
             }
           }
           break;
@@ -338,72 +338,85 @@ Available Commands:
           
           let tree = '📁 /\n' + buildTree(null);
           if (tree.trim() === '📁 /') {
-            addLine('info', 'No folders found');
+            collectLine('info', 'No folders found');
           } else {
-            addLine('output', tree);
+            collectLine('output', tree);
           }
           break;
         }
 
         case 'mkdir': {
           if (args.length === 0) {
-            addLine('error', 'Usage: mkdir <folder_name>');
+            collectLine('error', 'Usage: mkdir <folder_name>');
             break;
           }
           const folderName = args.join(' ');
           const result = await callbacks.onCreateFolder(folderName);
           if (result) {
-            addLine('success', `Created directory: ${folderName}`);
+            collectLine('success', `Created directory: ${folderName}`);
           } else {
-            addLine('error', `Failed to create directory: ${folderName}`);
+            collectLine('error', `Failed to create directory: ${folderName}`);
           }
           break;
         }
 
         case 'rmdir': {
           if (args.length === 0) {
-            addLine('error', 'Usage: rmdir <folder_name>');
+            collectLine('error', 'Usage: rmdir <folder_name>');
             break;
           }
           const folder = resolveFolderName(args.join(' '));
           if (folder) {
             callbacks.onDeleteFolder(folder.id);
-            addLine('success', `Deleted directory: ${folder.name}`);
+            collectLine('success', `Deleted directory: ${folder.name}`);
           } else {
-            addLine('error', `rmdir: no such directory: ${args.join(' ')}`);
+            collectLine('error', `rmdir: no such directory: ${args.join(' ')}`);
           }
           break;
         }
 
         case 'download':
         case 'dl': {
-          if (args.length === 0) {
-            addLine('error', 'Usage: download <filename>');
+          if (args.length === 0 && pipedInput.length === 0) {
+            collectLine('error', 'Usage: download <filename>');
             break;
           }
           
+          // If piped input, download each file from piped results
+          if (pipedInput.length > 0) {
+            const fileNames = extractFileNamesFromPipedInput(pipedInput);
+            collectLine('info', `Downloading ${fileNames.length} file(s) from pipe...`);
+            for (const name of fileNames) {
+              const file = resolveFileName(name);
+              if (file) {
+                callbacks.onDownload(file.id);
+                collectLine('success', `  ↓ ${file.name}`);
+              }
+            }
+            break;
+          }
+
           const pattern = args.join(' ');
           
-          // Wildcard support
           if (pattern.includes('*')) {
             const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$', 'i');
             const matches = getCurrentFolderFiles().filter(f => regex.test(f.name));
             if (matches.length === 0) {
-              addLine('error', `No files matching: ${pattern}`);
+              collectLine('error', `No files matching: ${pattern}`);
             } else {
-              addLine('info', `Downloading ${matches.length} file(s)...`);
+              collectLine('info', `Downloading ${matches.length} file(s)...`);
               for (const file of matches) {
                 callbacks.onDownload(file.id);
-                addLine('success', `  ↓ ${file.name}`);
+                collectLine('success', `  ↓ ${file.name}`);
               }
             }
           } else {
             const file = resolveFileName(pattern);
             if (file) {
               callbacks.onDownload(file.id);
-              addLine('success', `Downloading: ${file.name} (${formatSize(file.size_bytes)})`);
+              collectLine('success', `Downloading: ${file.name} (${formatSize(file.size_bytes)})`);
             } else {
-              addLine('error', `File not found: ${pattern}`);
+              collectLine('error', `File not found: ${pattern}`);
             }
           }
           break;
@@ -412,15 +425,15 @@ Available Commands:
         case 'open':
         case 'preview': {
           if (args.length === 0) {
-            addLine('error', `Usage: ${command} <filename>`);
+            collectLine('error', `Usage: ${command} <filename>`);
             break;
           }
           const file = resolveFileName(args.join(' '));
           if (file) {
             callbacks.onPreview(file.id);
-            addLine('success', `Opening preview: ${file.name}`);
+            collectLine('success', `Opening preview: ${file.name}`);
           } else {
-            addLine('error', `File not found: ${args.join(' ')}`);
+            collectLine('error', `File not found: ${args.join(' ')}`);
           }
           break;
         }
@@ -428,49 +441,67 @@ Available Commands:
         case 'share':
         case 'link': {
           if (args.length === 0) {
-            addLine('error', `Usage: ${command} <filename>`);
+            collectLine('error', `Usage: ${command} <filename>`);
             break;
           }
           const file = resolveFileName(args.join(' '));
           if (file) {
             callbacks.onShare(file.id);
-            addLine('success', `Creating share link for: ${file.name}`);
+            collectLine('success', `Creating share link for: ${file.name}`);
           } else {
-            addLine('error', `File not found: ${args.join(' ')}`);
+            collectLine('error', `File not found: ${args.join(' ')}`);
           }
           break;
         }
 
         case 'delete':
         case 'trash': {
-          if (args.length === 0) {
-            addLine('error', `Usage: ${command} <filename>`);
+          if (args.length === 0 && pipedInput.length === 0) {
+            collectLine('error', `Usage: ${command} <filename>`);
             break;
           }
           
+          // If piped input, delete each file from piped results
+          if (pipedInput.length > 0) {
+            const fileNames = extractFileNamesFromPipedInput(pipedInput);
+            if (fileNames.length > 5) {
+              collectLine('error', `⚠ Bulk delete blocked: ${fileNames.length} files. Use the GUI for bulk operations over 5 files.`);
+              break;
+            }
+            collectLine('info', `Trashing ${fileNames.length} file(s) from pipe...`);
+            for (const name of fileNames) {
+              const file = resolveFileName(name);
+              if (file) {
+                callbacks.onDelete(file.id);
+                collectLine('success', `  🗑 ${file.name}`);
+              }
+            }
+            break;
+          }
+
           const pattern = args.join(' ');
           
           if (pattern.includes('*')) {
             const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$', 'i');
             const matches = getCurrentFolderFiles().filter(f => regex.test(f.name));
             if (matches.length === 0) {
-              addLine('error', `No files matching: ${pattern}`);
+              collectLine('error', `No files matching: ${pattern}`);
             } else if (matches.length > 5) {
-              addLine('error', `⚠ Bulk delete blocked: ${matches.length} files matched. Use the GUI for bulk operations over 5 files.`);
+              collectLine('error', `⚠ Bulk delete blocked: ${matches.length} files matched. Use the GUI for bulk operations over 5 files.`);
             } else {
-              addLine('info', `Trashing ${matches.length} file(s)...`);
+              collectLine('info', `Trashing ${matches.length} file(s)...`);
               for (const file of matches) {
                 callbacks.onDelete(file.id);
-                addLine('success', `  🗑 ${file.name}`);
+                collectLine('success', `  🗑 ${file.name}`);
               }
             }
           } else {
             const file = resolveFileName(pattern);
             if (file) {
               callbacks.onDelete(file.id);
-              addLine('success', `Moved to trash: ${file.name}`);
+              collectLine('success', `Moved to trash: ${file.name}`);
             } else {
-              addLine('error', `File not found: ${pattern}`);
+              collectLine('error', `File not found: ${pattern}`);
             }
           }
           break;
@@ -478,25 +509,53 @@ Available Commands:
 
         case 'rename': {
           if (args.length === 0) {
-            addLine('error', 'Usage: rename <filename>');
+            collectLine('error', 'Usage: rename <filename>');
             break;
           }
           const file = resolveFileName(args.join(' '));
           if (file) {
             callbacks.onRename(file.id);
-            addLine('info', `Rename dialog opened for: ${file.name}`);
+            collectLine('info', `Rename dialog opened for: ${file.name}`);
           } else {
-            addLine('error', `File not found: ${args.join(' ')}`);
+            collectLine('error', `File not found: ${args.join(' ')}`);
           }
           break;
         }
 
         case 'move': {
-          if (args.length < 2) {
-            addLine('error', 'Usage: move <filename> <folder>');
+          if (args.length < 2 && pipedInput.length === 0) {
+            collectLine('error', 'Usage: move <filename> <folder>');
             break;
           }
           
+          // If piped, move piped files to the arg folder
+          if (pipedInput.length > 0 && args.length >= 1) {
+            const targetFolderName = args[0];
+            let targetFolderId: string | null = null;
+            if (targetFolderName === '/' || targetFolderName === '~') {
+              targetFolderId = null;
+            } else {
+              const tf = folders.find(f => f.name.toLowerCase() === targetFolderName.toLowerCase());
+              if (!tf) {
+                collectLine('error', `Target folder not found: ${targetFolderName}`);
+                break;
+              }
+              targetFolderId = tf.id;
+            }
+            const fileNames = extractFileNamesFromPipedInput(pipedInput);
+            const fileIds = fileNames.map(n => resolveFileName(n)).filter(Boolean).map(f => f.id);
+            if (fileIds.length > 0) {
+              const { error } = await supabase
+                .from('files')
+                .update({ folder_id: targetFolderId })
+                .in('id', fileIds);
+              if (error) throw error;
+              collectLine('success', `Moved ${fileIds.length} file(s) to ${targetFolderName}`);
+              callbacks.refreshData();
+            }
+            break;
+          }
+
           const pattern = args.slice(0, -1).join(' ');
           const targetFolderName = args[args.length - 1];
           
@@ -506,7 +565,7 @@ Available Commands:
           } else {
             const tf = folders.find(f => f.name.toLowerCase() === targetFolderName.toLowerCase());
             if (!tf) {
-              addLine('error', `Target folder not found: ${targetFolderName}`);
+              collectLine('error', `Target folder not found: ${targetFolderName}`);
               break;
             }
             targetFolderId = tf.id;
@@ -516,14 +575,14 @@ Available Commands:
             const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$', 'i');
             const matches = getCurrentFolderFiles().filter(f => regex.test(f.name));
             if (matches.length === 0) {
-              addLine('error', `No files matching: ${pattern}`);
+              collectLine('error', `No files matching: ${pattern}`);
             } else {
               const { error } = await supabase
                 .from('files')
                 .update({ folder_id: targetFolderId })
                 .in('id', matches.map(f => f.id));
               if (error) throw error;
-              addLine('success', `Moved ${matches.length} file(s) to ${targetFolderName}`);
+              collectLine('success', `Moved ${matches.length} file(s) to ${targetFolderName}`);
               callbacks.refreshData();
             }
           } else {
@@ -534,10 +593,10 @@ Available Commands:
                 .update({ folder_id: targetFolderId })
                 .eq('id', file.id);
               if (error) throw error;
-              addLine('success', `Moved ${file.name} to ${targetFolderName}`);
+              collectLine('success', `Moved ${file.name} to ${targetFolderName}`);
               callbacks.refreshData();
             } else {
-              addLine('error', `File not found: ${pattern}`);
+              collectLine('error', `File not found: ${pattern}`);
             }
           }
           break;
@@ -546,27 +605,27 @@ Available Commands:
         case 'find':
         case 'search': {
           if (args.length === 0) {
-            addLine('error', `Usage: ${command} <keyword>`);
+            collectLine('error', `Usage: ${command} <keyword>`);
             break;
           }
           const keyword = args.join(' ').toLowerCase();
           const matches = files.filter(f => f.name.toLowerCase().includes(keyword));
           if (matches.length === 0) {
-            addLine('info', `No files matching: \"${args.join(' ')}\"`);
+            collectLine('info', `No files matching: \"${args.join(' ')}\"`);
           } else {
             const output = matches.map(f => {
               const foldPath = f.folder_id ? folders.find(fo => fo.id === f.folder_id)?.name || '?' : '/';
               return `  ${f.name}  (${formatSize(f.size_bytes)})  [${foldPath}]`;
             }).join('\n');
-            addLine('output', output);
-            addLine('info', `Found ${matches.length} result(s)`);
+            collectLine('output', output);
+            collectLine('info', `Found ${matches.length} result(s)`);
           }
           break;
         }
 
         case 'type': {
           if (args.length === 0) {
-            addLine('error', 'Usage: type <image|pdf|video|audio|doc|archive>');
+            collectLine('error', 'Usage: type <image|pdf|video|audio|doc|archive>');
             break;
           }
           const typeMap: Record<string, string[]> = {
@@ -582,40 +641,40 @@ Available Commands:
           const typeKey = args[0].toLowerCase();
           const mimePatterns = typeMap[typeKey];
           if (!mimePatterns) {
-            addLine('error', `Unknown type: ${typeKey}. Use: image, pdf, video, audio, doc, archive`);
+            collectLine('error', `Unknown type: ${typeKey}. Use: image, pdf, video, audio, doc, archive`);
             break;
           }
           const matches2 = files.filter(f => 
             f.mime_type && mimePatterns.some(p => f.mime_type.startsWith(p))
           );
           if (matches2.length === 0) {
-            addLine('info', `No ${typeKey} files found`);
+            collectLine('info', `No ${typeKey} files found`);
           } else {
             const output = matches2.map(f => `  ${f.name}  ${formatSize(f.size_bytes)}  ${formatDate(f.created_at)}`).join('\n');
-            addLine('output', output);
-            addLine('info', `${matches2.length} ${typeKey} file(s)`);
+            collectLine('output', output);
+            collectLine('info', `${matches2.length} ${typeKey} file(s)`);
           }
           break;
         }
 
         case 'upload': {
           callbacks.onUploadClick();
-          addLine('info', 'Upload dialog opened');
+          collectLine('info', 'Upload dialog opened');
           break;
         }
 
         case 'restore': {
-          addLine('info', 'Use the Trash page to restore files');
+          collectLine('info', 'Use the Trash page to restore files');
           break;
         }
 
         case 'ai': {
           if (args.length === 0) {
-            addLine('error', 'Usage: ai <natural language command>');
+            collectLine('error', 'Usage: ai <natural language command>');
             break;
           }
           const query = args.join(' ');
-          addLine('info', '🤖 Processing...');
+          collectLine('info', '🤖 Processing...');
           
           try {
             const { data, error } = await supabase.functions.invoke('terminal-ai', {
@@ -625,29 +684,29 @@ Available Commands:
             if (error) throw error;
             
             if (data?.command) {
-              addLine('info', `→ Interpreted as: ${data.command}`);
-              // Execute the interpreted command
-              await executeCommand(data.command);
+              collectLine('info', `→ Interpreted as: ${data.command}`);
+              // Execute the interpreted command (without re-adding to history)
+              await executeSingleCommand(data.command, isPiped, pipedInput);
             } else if (data?.response) {
-              addLine('output', data.response);
+              collectLine('output', data.response);
             } else {
-              addLine('error', 'AI could not interpret the command');
+              collectLine('error', 'AI could not interpret the command');
             }
           } catch (err: any) {
-            addLine('error', `AI error: ${err.message || 'Failed to process'}`);
+            collectLine('error', `AI error: ${err.message || 'Failed to process'}`);
           }
           break;
         }
 
         default: {
-          addLine('error', `Command not found: ${command}. Type 'help' for available commands.`);
+          collectLine('error', `Command not found: ${command}. Type 'help' for available commands.`);
         }
       }
     } catch (err: any) {
-      addLine('error', `Error: ${err.message || 'Unknown error'}`);
-    } finally {
-      setIsProcessing(false);
+      collectLine('error', `Error: ${err.message || 'Unknown error'}`);
     }
+
+    return outputLines;
   }, [addLine, userId, files, folders, callbacks, getCurrentFolderFiles, getCurrentFolderSubfolders, resolveFileName, resolveFolderName, getPathString, commandHistory]);
 
   const getAutocomplete = useCallback((input: string): string[] => {
