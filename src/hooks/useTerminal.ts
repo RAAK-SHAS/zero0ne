@@ -218,6 +218,10 @@ Available Commands:
   AI Assistant
     ai <query>            Natural language file commands
     
+  Piping
+    cmd1 | cmd2           Pipe output of cmd1 to cmd2
+    find report | delete  Find files then delete matches
+
   Aliases: rm=delete, ll=ls, dir=ls, cp=copy, mv=move, dl=download
 ─────────────────────────────────────────`);
           break;
