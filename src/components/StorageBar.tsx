@@ -6,9 +6,10 @@ import { useMemo } from 'react';
 interface StorageBarProps {
   used: number;
   total: number;
+  compact?: boolean;
 }
 
-export const StorageBar = ({ used, total }: StorageBarProps) => {
+export const StorageBar = ({ used, total, compact = false }: StorageBarProps) => {
   const percentage = useMemo(() => (used / total) * 100, [used, total]);
   
   const getStorageStatus = () => {
@@ -20,6 +21,21 @@ export const StorageBar = ({ used, total }: StorageBarProps) => {
 
   const status = getStorageStatus();
   
+  if (compact) {
+    return (
+      <div className="space-y-2">
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Storage</span>
+          <span className="font-medium tabular-nums">{percentage.toFixed(0)}%</span>
+        </div>
+        <Progress value={percentage} className="h-1.5 rounded-full" />
+        <p className="text-xs text-muted-foreground">
+          {formatBytes(used)} of {formatBytes(total)}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">

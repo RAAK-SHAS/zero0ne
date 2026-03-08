@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUploadManager } from '@/contexts/UploadContext';
 import { useDownloadManager } from '@/contexts/DownloadContext';
@@ -34,6 +34,8 @@ import { StorageAnalytics } from '@/components/StorageAnalytics';
 import { TagManager } from '@/components/TagManager';
 import { FileTypeFilter, FileTypeCategory, getFileTypeCategory } from '@/components/FileTypeFilter';
 import { SortControl, SortConfig } from '@/components/SortControl';
+import { AppSidebar } from '@/components/AppSidebar';
+import { MobileNav } from '@/components/MobileNav';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
 import { 
@@ -45,7 +47,8 @@ import {
   Star, 
   BarChart3,
   Activity,
-  EyeOff
+  EyeOff,
+  Menu
 } from 'lucide-react';
 import JSZip from 'jszip';
 import {
@@ -98,6 +101,9 @@ interface FileItem {
 const Dashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const currentView = searchParams.get('view') || 'files';
+  
   const [profile, setProfile] = useState<Profile | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -265,7 +271,7 @@ const Dashboard = () => {
       const { data, error } = await supabase.storage
         .from('user-files')
         .createSignedUrl(file.storage_path, 3600, {
-          download: false, // Use inline disposition for preview instead of attachment
+          download: false,
         });
 
       if (error) throw error;
@@ -304,7 +310,6 @@ const Dashboard = () => {
 
   const handleUpdateShare = async (expirationDays: number | null, password: string | null) => {
     try {
-      // Use edge function for secure bcrypt password hashing
       const session = await supabase.auth.getSession();
       const accessToken = session.data.session?.access_token;
       
@@ -434,9 +439,7 @@ const Dashboard = () => {
     const file = files.find(f => f.id === fileId);
     if (!file) return;
 
-    // Check if it's an archive file
     if (isArchiveExtension(file.name)) {
-      // Use the new ArchiveManager for preview
       setPreviewArchiveFile(file);
     } else {
       toast.error('Not a supported archive format');
@@ -482,7 +485,6 @@ const Dashboard = () => {
     };
     
     files.forEach(file => {
-      // Only count files in current folder context
       if (currentFolderId) {
         if (file.folder_id !== currentFolderId) return;
       } else {
@@ -499,13 +501,29 @@ const Dashboard = () => {
 
   // Filter and sort files
   const filteredAndSortedFiles = useMemo(() => {
-    return files
+    let baseFiles = files;
+
+    // Apply view-specific filters
+    if (currentView === 'recent') {
+      // Show files from last 7 days, sorted by date
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      baseFiles = files.filter(f => new Date(f.created_at) >= sevenDaysAgo);
+    } else if (currentView === 'shared') {
+      // For now, show files that have been shared (we'd need to query shares table)
+      // This is a simplified version - show all files as a placeholder
+      baseFiles = files;
+    }
+
+    return baseFiles
       .filter(file => {
-        // Filter by current folder
-        if (currentFolderId) {
-          if (file.folder_id !== currentFolderId) return false;
-        } else {
-          if (file.folder_id) return false;
+        // Only apply folder filter in main files view
+        if (currentView === 'files') {
+          if (currentFolderId) {
+            if (file.folder_id !== currentFolderId) return false;
+          } else {
+            if (file.folder_id) return false;
+          }
         }
         
         // Filter by search
@@ -545,10 +563,12 @@ const Dashboard = () => {
         
         return direction === 'asc' ? comparison : -comparison;
       });
-  }, [files, currentFolderId, searchQuery, filterFavorites, filterTag, filterType, sortConfig]);
+  }, [files, currentFolderId, searchQuery, filterFavorites, filterTag, filterType, sortConfig, currentView]);
 
   const currentFolders = getChildFolders(currentFolderId);
   const currentPath = getCurrentPath();
+
+  const viewTitle = currentView === 'recent' ? 'Recent Files' : currentView === 'shared' ? 'Shared Files' : filterFavorites ? 'Favorites' : 'My Files';
 
   if (loading) {
     return (
@@ -562,218 +582,244 @@ const Dashboard = () => {
   }
 
   return (
-    <div 
-      {...getRootProps()} 
-      className="min-h-screen bg-gradient-to-br from-background to-accent/20"
-    >
-      <input {...getInputProps()} />
-      
-      {isDragActive && (
-        <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-card p-8 rounded-lg border-2 border-dashed border-primary">
-            <Upload className="h-16 w-16 mx-auto mb-4 text-primary" />
-            <p className="text-xl font-medium">Drop files here to upload</p>
-          </div>
-        </div>
-      )}
+    <div className="flex h-screen bg-gradient-to-br from-background to-accent/20">
+      {/* Sidebar - desktop */}
+      <AppSidebar
+        storageUsed={profile?.storage_used_bytes || 0}
+        storageTotal={profile?.storage_quota_bytes || 109951162777600}
+        onUploadClick={() => navigate('/upload')}
+        onNewFolderClick={() => setShowCreateFolder(true)}
+      />
 
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Cloud className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-bold">CloudStore</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <GlobalUploadIndicator />
-            
-            {/* Analytics Sheet */}
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <BarChart3 className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
-                <SheetHeader>
-                  <SheetTitle>Storage Analytics</SheetTitle>
-                </SheetHeader>
-                <div className="mt-6">
-                  <Tabs defaultValue="analytics">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="analytics">
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Storage
-                      </TabsTrigger>
-                      <TabsTrigger value="activity">
-                        <Activity className="h-4 w-4 mr-2" />
-                        Activity
-                      </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="analytics" className="mt-4">
-                      <StorageAnalytics userId={user?.id} />
-                    </TabsContent>
-                    <TabsContent value="activity" className="mt-4">
-                      <ActivityPanel userId={user?.id} />
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              </SheetContent>
-            </Sheet>
-            
-            <Button variant="ghost" size="sm" onClick={() => navigate('/trash')}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Trash
-            </Button>
-            <ThemeToggle />
-            <Button variant="ghost" size="icon" onClick={signOut}>
-              <LogOut className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto space-y-6">
-          <div className="bg-card rounded-lg p-6 shadow-lg">
-            <StorageBar
-              used={profile?.storage_used_bytes || 0}
-              total={profile?.storage_quota_bytes || 107374182400}
-            />
-          </div>
-
-          {/* Folder navigation */}
-          {(currentFolderId || folders.length > 0) && (
-            <div className="bg-card rounded-lg px-4 py-2 shadow-lg">
-              <FolderBreadcrumb path={currentPath} onNavigate={setCurrentFolderId} />
+      {/* Main content */}
+      <div
+        {...getRootProps()}
+        className="flex-1 flex flex-col min-h-0 overflow-hidden"
+      >
+        <input {...getInputProps()} />
+        
+        {isDragActive && (
+          <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-card p-8 rounded-lg border-2 border-dashed border-primary">
+              <Upload className="h-16 w-16 mx-auto mb-4 text-primary" />
+              <p className="text-xl font-medium">Drop files here to upload</p>
             </div>
-          )}
+          </div>
+        )}
 
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h2 className="text-2xl font-bold">
-              {filterFavorites ? 'Favorites' : 'My Files'}
-              {filterTag && <span className="text-primary ml-2">#{filterTag}</span>}
-            </h2>
-            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-              <SearchFilter value={searchQuery} onChange={setSearchQuery} />
+        {/* Mobile header */}
+        <header className="md:hidden border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Cloud className="h-6 w-6 text-primary" />
+              <h1 className="text-lg font-bold">CloudStore</h1>
+            </div>
+            <div className="flex items-center gap-1">
+              <GlobalUploadIndicator />
+              <ThemeToggle />
+              <Button variant="ghost" size="icon" onClick={signOut}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {/* Desktop header bar */}
+        <header className="hidden md:flex border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+          <div className="flex-1 px-6 py-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">{viewTitle}</h2>
+            <div className="flex items-center gap-2">
+              <GlobalUploadIndicator />
               
-              {/* Favorites filter */}
-              <Button
-                variant={filterFavorites ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilterFavorites(!filterFavorites)}
-              >
-                <Star className={`h-4 w-4 ${filterFavorites ? 'fill-current' : ''}`} />
-              </Button>
+              {/* Analytics Sheet */}
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <BarChart3 className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+                  <SheetHeader>
+                    <SheetTitle>Storage Analytics</SheetTitle>
+                  </SheetHeader>
+                  <div className="mt-6">
+                    <Tabs defaultValue="analytics">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="analytics">
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          Storage
+                        </TabsTrigger>
+                        <TabsTrigger value="activity">
+                          <Activity className="h-4 w-4 mr-2" />
+                          Activity
+                        </TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="analytics" className="mt-4">
+                        <StorageAnalytics userId={user?.id} />
+                      </TabsContent>
+                      <TabsContent value="activity" className="mt-4">
+                        <ActivityPanel userId={user?.id} />
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
+          </div>
+        </header>
 
-              {/* Show hidden folders toggle */}
-              <Button
-                variant={showHidden ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowHidden(!showHidden)}
-                title={showHidden ? "Hide hidden folders" : "Show hidden folders"}
-              >
-                <EyeOff className="h-4 w-4" />
-              </Button>
+        <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
+          <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
+            {/* Storage bar - mobile only */}
+            <div className="md:hidden bg-card rounded-lg p-4 shadow-lg">
+              <StorageBar
+                used={profile?.storage_used_bytes || 0}
+                total={profile?.storage_quota_bytes || 109951162777600}
+              />
+            </div>
 
-              {/* Tag filter */}
-              {allTags.length > 0 && (
-                <Select 
-                  value={filterTag || ''} 
-                  onValueChange={(v) => setFilterTag(v || null)}
+            {/* Folder navigation - only in files view */}
+            {currentView === 'files' && (currentFolderId || folders.length > 0) && (
+              <div className="bg-card rounded-lg px-4 py-2 shadow-lg">
+                <FolderBreadcrumb path={currentPath} onNavigate={setCurrentFolderId} />
+              </div>
+            )}
+
+            {/* Toolbar */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <h2 className="text-2xl font-bold md:hidden">
+                {viewTitle}
+                {filterTag && <span className="text-primary ml-2">#{filterTag}</span>}
+              </h2>
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <SearchFilter value={searchQuery} onChange={setSearchQuery} />
+                
+                {/* Favorites filter */}
+                <Button
+                  variant={filterFavorites ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterFavorites(!filterFavorites)}
                 >
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Filter tag" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All tags</SelectItem>
-                    {allTags.map(tag => (
-                      <SelectItem key={tag} value={tag}>{tag}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <Star className={`h-4 w-4 ${filterFavorites ? 'fill-current' : ''}`} />
+                </Button>
+
+                {/* Show hidden folders toggle */}
+                {currentView === 'files' && (
+                  <Button
+                    variant={showHidden ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowHidden(!showHidden)}
+                    title={showHidden ? "Hide hidden folders" : "Show hidden folders"}
+                  >
+                    <EyeOff className="h-4 w-4" />
+                  </Button>
+                )}
+
+                {/* Tag filter */}
+                {allTags.length > 0 && (
+                  <Select 
+                    value={filterTag || ''} 
+                    onValueChange={(v) => setFilterTag(v || null)}
+                  >
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue placeholder="Filter tag" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All tags</SelectItem>
+                      {allTags.map(tag => (
+                        <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                
+                <FileTypeFilter 
+                  value={filterType} 
+                  onChange={setFilterType} 
+                  fileCounts={fileTypeCounts}
+                />
+                
+                <SortControl value={sortConfig} onChange={setSortConfig} />
+                
+                <ViewToggle view={viewMode} onChange={setViewMode} />
+                
+                {/* Mobile-only action buttons */}
+                <div className="flex gap-2 md:hidden">
+                  <Button variant="outline" size="sm" onClick={() => setShowCreateFolder(true)}>
+                    <FolderPlus className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" onClick={() => navigate('/upload')}>
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-card rounded-lg p-4 md:p-6 shadow-lg">
+              {/* Folders - only in files view */}
+              {currentView === 'files' && (
+                <FolderGrid
+                  folders={currentFolders}
+                  onOpen={(id) => {
+                    const folder = folders.find(f => f.id === id);
+                    if (folder?.is_locked && !isFolderUnlocked(id)) {
+                      setLockFolderId(id);
+                      setLockAction('unlock');
+                    } else {
+                      setCurrentFolderId(id);
+                    }
+                  }}
+                  onRename={setRenameFolderId}
+                  onDelete={setDeleteFolderId}
+                  onToggleHidden={toggleHidden}
+                  onLock={(id) => { setLockFolderId(id); setLockAction('lock'); }}
+                  onUnlock={(id) => { setLockFolderId(id); setLockAction('unlock'); }}
+                  onRemoveLock={(id) => { setLockFolderId(id); setLockAction('remove_lock'); }}
+                  onChangePassword={(id) => { setLockFolderId(id); setLockAction('change_password'); }}
+                  isFolderUnlocked={isFolderUnlocked}
+                />
               )}
               
-              <FileTypeFilter 
-                value={filterType} 
-                onChange={setFilterType} 
-                fileCounts={fileTypeCounts}
-              />
-              
-              <SortControl value={sortConfig} onChange={setSortConfig} />
-              
-              <ViewToggle view={viewMode} onChange={setViewMode} />
-              
-              <Button variant="outline" onClick={() => setShowCreateFolder(true)}>
-                <FolderPlus className="h-4 w-4 mr-2" />
-                New Folder
-              </Button>
-              
-              <Button onClick={() => navigate('/upload')}>
-                <Upload className="h-4 w-4 mr-2" />
-                Upload
-              </Button>
+              {/* Files */}
+              {viewMode === 'list' ? (
+                <FileList
+                  files={filteredAndSortedFiles}
+                  selectedFiles={selectedFiles}
+                  onSelectFile={handleSelectFile}
+                  onSelectAll={handleSelectAll}
+                  onDownload={handleDownload}
+                  onShare={handleShare}
+                  onDelete={(id) => setDeleteFileId(id)}
+                  onRename={(id) => setRenameFileId(id)}
+                  onPreview={handlePreview}
+                  onEncrypt={(id) => setEncryptFileId(id)}
+                  onVersionHistory={(id) => setVersionHistoryFileId(id)}
+                  onExtractZip={handleExtractZip}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              ) : (
+                <FileGrid
+                  files={filteredAndSortedFiles}
+                  selectedFiles={selectedFiles}
+                  onSelectFile={handleSelectFile}
+                  onDownload={handleDownload}
+                  onShare={handleShare}
+                  onDelete={(id) => setDeleteFileId(id)}
+                  onRename={(id) => setRenameFileId(id)}
+                  onPreview={handlePreview}
+                  onEncrypt={(id) => setEncryptFileId(id)}
+                  onVersionHistory={(id) => setVersionHistoryFileId(id)}
+                  onExtractZip={handleExtractZip}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              )}
             </div>
           </div>
+        </main>
 
-          <div className="bg-card rounded-lg p-6 shadow-lg">
-            {/* Folders */}
-            <FolderGrid
-              folders={currentFolders}
-              onOpen={(id) => {
-                const folder = folders.find(f => f.id === id);
-                if (folder?.is_locked && !isFolderUnlocked(id)) {
-                  setLockFolderId(id);
-                  setLockAction('unlock');
-                } else {
-                  setCurrentFolderId(id);
-                }
-              }}
-              onRename={setRenameFolderId}
-              onDelete={setDeleteFolderId}
-              onToggleHidden={toggleHidden}
-              onLock={(id) => { setLockFolderId(id); setLockAction('lock'); }}
-              onUnlock={(id) => { setLockFolderId(id); setLockAction('unlock'); }}
-              onRemoveLock={(id) => { setLockFolderId(id); setLockAction('remove_lock'); }}
-              onChangePassword={(id) => { setLockFolderId(id); setLockAction('change_password'); }}
-              isFolderUnlocked={isFolderUnlocked}
-            />
-            
-            {/* Files */}
-            {viewMode === 'list' ? (
-              <FileList
-                files={filteredAndSortedFiles}
-                selectedFiles={selectedFiles}
-                onSelectFile={handleSelectFile}
-                onSelectAll={handleSelectAll}
-                onDownload={handleDownload}
-                onShare={handleShare}
-                onDelete={(id) => setDeleteFileId(id)}
-                onRename={(id) => setRenameFileId(id)}
-                onPreview={handlePreview}
-                onEncrypt={(id) => setEncryptFileId(id)}
-                onVersionHistory={(id) => setVersionHistoryFileId(id)}
-                onExtractZip={handleExtractZip}
-                onToggleFavorite={handleToggleFavorite}
-              />
-            ) : (
-              <FileGrid
-                files={filteredAndSortedFiles}
-                selectedFiles={selectedFiles}
-                onSelectFile={handleSelectFile}
-                onDownload={handleDownload}
-                onShare={handleShare}
-                onDelete={(id) => setDeleteFileId(id)}
-                onRename={(id) => setRenameFileId(id)}
-                onPreview={handlePreview}
-                onEncrypt={(id) => setEncryptFileId(id)}
-                onVersionHistory={(id) => setVersionHistoryFileId(id)}
-                onExtractZip={handleExtractZip}
-                onToggleFavorite={handleToggleFavorite}
-              />
-            )}
-          </div>
-        </div>
-      </main>
+        {/* Mobile nav */}
+        <MobileNav />
+      </div>
 
       {selectedFiles.length > 0 && (
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-40">
