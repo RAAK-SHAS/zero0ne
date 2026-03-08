@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 interface StorageBarProps {
   used: number;
   total: number;
+  compact?: boolean;
 }
 
 export const StorageBar = ({ used, total }: StorageBarProps) => {
