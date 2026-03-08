@@ -39,6 +39,8 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { MobileNav } from '@/components/MobileNav';
 import { CommandPalette, useCommandPalette } from '@/components/CommandPalette';
 import { SystemLog, useSystemLog } from '@/components/SystemLog';
+import { TerminalPanel } from '@/components/TerminalPanel';
+import { useTerminal } from '@/hooks/useTerminal';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
 import { PDFEditor } from '@/components/editors/PDFEditor';
