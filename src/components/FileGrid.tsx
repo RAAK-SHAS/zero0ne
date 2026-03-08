@@ -170,7 +170,7 @@ FileCard.displayName = 'FileCard';
 
 export const FileGrid = memo(({
   files, selectedFiles, onSelectFile, onDownload, onShare, onDelete,
-  onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite,
+  onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit,
 }: FileGridProps) => {
   if (files.length === 0) {
     return (
