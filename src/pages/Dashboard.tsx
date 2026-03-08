@@ -732,65 +732,74 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <div className="neon-border rounded-lg p-4 md:p-6 bg-card/30 glass">
-              {/* Folders - only in files view */}
-              {currentView === 'files' && (
-                <FolderGrid
-                  folders={currentFolders}
-                  onOpen={(id) => {
-                    const folder = folders.find(f => f.id === id);
-                    if (folder?.is_locked && !isFolderUnlocked(id)) {
-                      setLockFolderId(id);
-                      setLockAction('unlock');
-                    } else {
-                      setCurrentFolderId(id);
-                    }
-                  }}
-                  onRename={setRenameFolderId}
-                  onDelete={setDeleteFolderId}
-                  onToggleHidden={toggleHidden}
-                  onLock={(id) => { setLockFolderId(id); setLockAction('lock'); }}
-                  onUnlock={(id) => { setLockFolderId(id); setLockAction('unlock'); }}
-                  onRemoveLock={(id) => { setLockFolderId(id); setLockAction('remove_lock'); }}
-                  onChangePassword={(id) => { setLockFolderId(id); setLockAction('change_password'); }}
-                  isFolderUnlocked={isFolderUnlocked}
-                />
-              )}
-              
-              {/* Files */}
-              {viewMode === 'list' ? (
-                <FileList
-                  files={filteredAndSortedFiles}
-                  selectedFiles={selectedFiles}
-                  onSelectFile={handleSelectFile}
-                  onSelectAll={handleSelectAll}
-                  onDownload={handleDownload}
-                  onShare={handleShare}
-                  onDelete={(id) => setDeleteFileId(id)}
-                  onRename={(id) => setRenameFileId(id)}
-                  onPreview={handlePreview}
-                  onEncrypt={(id) => setEncryptFileId(id)}
-                  onVersionHistory={(id) => setVersionHistoryFileId(id)}
-                  onExtractZip={handleExtractZip}
-                  onToggleFavorite={handleToggleFavorite}
-                />
-              ) : (
-                <FileGrid
-                  files={filteredAndSortedFiles}
-                  selectedFiles={selectedFiles}
-                  onSelectFile={handleSelectFile}
-                  onDownload={handleDownload}
-                  onShare={handleShare}
-                  onDelete={(id) => setDeleteFileId(id)}
-                  onRename={(id) => setRenameFileId(id)}
-                  onPreview={handlePreview}
-                  onEncrypt={(id) => setEncryptFileId(id)}
-                  onVersionHistory={(id) => setVersionHistoryFileId(id)}
-                  onExtractZip={handleExtractZip}
-                  onToggleFavorite={handleToggleFavorite}
-                />
-              )}
-            </div>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentView}
+                initial={{ opacity: 0, x: 40, scale: 0.98 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -40, scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30, mass: 0.8 }}
+                className="neon-border rounded-lg p-4 md:p-6 bg-card/30 glass"
+              >
+                {/* Folders - only in files view */}
+                {currentView === 'files' && (
+                  <FolderGrid
+                    folders={currentFolders}
+                    onOpen={(id) => {
+                      const folder = folders.find(f => f.id === id);
+                      if (folder?.is_locked && !isFolderUnlocked(id)) {
+                        setLockFolderId(id);
+                        setLockAction('unlock');
+                      } else {
+                        setCurrentFolderId(id);
+                      }
+                    }}
+                    onRename={setRenameFolderId}
+                    onDelete={setDeleteFolderId}
+                    onToggleHidden={toggleHidden}
+                    onLock={(id) => { setLockFolderId(id); setLockAction('lock'); }}
+                    onUnlock={(id) => { setLockFolderId(id); setLockAction('unlock'); }}
+                    onRemoveLock={(id) => { setLockFolderId(id); setLockAction('remove_lock'); }}
+                    onChangePassword={(id) => { setLockFolderId(id); setLockAction('change_password'); }}
+                    isFolderUnlocked={isFolderUnlocked}
+                  />
+                )}
+                
+                {/* Files */}
+                {viewMode === 'list' ? (
+                  <FileList
+                    files={filteredAndSortedFiles}
+                    selectedFiles={selectedFiles}
+                    onSelectFile={handleSelectFile}
+                    onSelectAll={handleSelectAll}
+                    onDownload={handleDownload}
+                    onShare={handleShare}
+                    onDelete={(id) => setDeleteFileId(id)}
+                    onRename={(id) => setRenameFileId(id)}
+                    onPreview={handlePreview}
+                    onEncrypt={(id) => setEncryptFileId(id)}
+                    onVersionHistory={(id) => setVersionHistoryFileId(id)}
+                    onExtractZip={handleExtractZip}
+                    onToggleFavorite={handleToggleFavorite}
+                  />
+                ) : (
+                  <FileGrid
+                    files={filteredAndSortedFiles}
+                    selectedFiles={selectedFiles}
+                    onSelectFile={handleSelectFile}
+                    onDownload={handleDownload}
+                    onShare={handleShare}
+                    onDelete={(id) => setDeleteFileId(id)}
+                    onRename={(id) => setRenameFileId(id)}
+                    onPreview={handlePreview}
+                    onEncrypt={(id) => setEncryptFileId(id)}
+                    onVersionHistory={(id) => setVersionHistoryFileId(id)}
+                    onExtractZip={handleExtractZip}
+                    onToggleFavorite={handleToggleFavorite}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
 
             {/* System Log */}
             <SystemLog logs={systemLogs} />
