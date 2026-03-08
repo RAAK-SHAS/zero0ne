@@ -895,6 +895,19 @@ const Dashboard = () => {
       {/* Command Palette */}
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} onSearch={setSearchQuery} />
 
+      {/* Terminal Panel */}
+      <TerminalPanel
+        lines={terminal.lines}
+        isProcessing={terminal.isProcessing}
+        onExecute={terminal.executeCommand}
+        getAutocomplete={terminal.getAutocomplete}
+        commandHistory={terminal.commandHistory}
+        historyIndex={terminal.historyIndex}
+        setHistoryIndex={terminal.setHistoryIndex}
+        isOpen={terminalOpen}
+        onToggle={() => setTerminalOpen(prev => !prev)}
+      />
+
       {selectedFiles.length > 0 && (
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-40">
           <ArchiveManager 
