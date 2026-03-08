@@ -178,7 +178,7 @@ export const useTerminal = (
     try {
       switch (command) {
         case 'help': {
-          addLine('info', `
+          collectLine('info', `
 Available Commands:
 ─────────────────────────────────────────
   Navigation
