@@ -790,12 +790,17 @@ const Dashboard = () => {
                 />
               )}
             </div>
+
+            {/* System Log */}
+            <SystemLog logs={systemLogs} />
           </div>
         </main>
 
-        {/* Mobile nav */}
         <MobileNav />
       </div>
+
+      {/* Command Palette */}
+      <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} onSearch={setSearchQuery} />
 
       {selectedFiles.length > 0 && (
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-40">
