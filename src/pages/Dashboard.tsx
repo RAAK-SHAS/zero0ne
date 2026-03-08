@@ -116,6 +116,8 @@ const Dashboard = () => {
   const { downloadFile, downloadMultipleAsZip } = useDownloadManager();
   const { toggleFavorite } = useFavorites();
   const { logActivity } = useActivityLog(user?.id);
+  const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
+  const { logs: systemLogs, addLog } = useSystemLog();
   
   const {
     folders,
