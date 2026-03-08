@@ -381,7 +381,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         uploadDataDuringCreation: true,
         removeFingerprintOnSuccess: true,
-        chunkSize: TUS_CHUNK_SIZE,
+        chunkSize: getChunkSize(file.size),
         parallelUploads: 1, // Keep at 1 for stability with large files
         metadata: {
           bucketName: 'user-files',
