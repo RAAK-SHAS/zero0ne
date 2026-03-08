@@ -136,6 +136,7 @@ const FileRow = memo(({
           <DropdownMenuItem onClick={() => onShare(file.id)}><Share2 className="h-4 w-4 mr-2" /> Share</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onRename(file.id)}><Edit2 className="h-4 w-4 mr-2" /> Rename</DropdownMenuItem>
+          {isEditable && onEdit && <DropdownMenuItem onClick={() => onEdit(file.id)}><Pencil className="h-4 w-4 mr-2" /> Edit File</DropdownMenuItem>}
           <DropdownMenuItem onClick={() => onVersionHistory(file.id)}><Clock className="h-4 w-4 mr-2" /> Version History</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onEncrypt(file.id)}><Lock className="h-4 w-4 mr-2" /> {file.is_encrypted ? 'Decrypt' : 'Encrypt'}</DropdownMenuItem>
           {isArchiveFile(file.name) && onExtractZip && (
