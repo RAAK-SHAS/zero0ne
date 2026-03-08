@@ -651,16 +651,12 @@ const Dashboard = () => {
         <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
           <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
             {/* Storage bar - mobile only */}
-            <div className="md:hidden bg-card rounded-lg p-4 shadow-lg">
-              <StorageBar
-                used={profile?.storage_used_bytes || 0}
-                total={profile?.storage_quota_bytes || 109951162777600}
-              />
+            <div className="md:hidden neon-border rounded-lg p-4 bg-card/50 glass">
+              <StorageBar used={profile?.storage_used_bytes || 0} total={profile?.storage_quota_bytes || 109951162777600} />
             </div>
 
-            {/* Folder navigation - only in files view */}
             {currentView === 'files' && (currentFolderId || folders.length > 0) && (
-              <div className="bg-card rounded-lg px-4 py-2 shadow-lg">
+              <div className="neon-border rounded-lg px-4 py-2 bg-card/50 glass">
                 <FolderBreadcrumb path={currentPath} onNavigate={setCurrentFolderId} />
               </div>
             )}
