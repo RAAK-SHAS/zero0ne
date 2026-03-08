@@ -426,6 +426,39 @@ const Dashboard = () => {
     }
   };
 
+  const handleEdit = async (fileId: string) => {
+    const file = files.find(f => f.id === fileId);
+    if (!file) return;
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const mime = file.mime_type || '';
+
+    let type: 'pdf' | 'video' | 'audio' | 'image' | 'markdown' | null = null;
+    if (mime.includes('pdf') || ext === 'pdf') type = 'pdf';
+    else if (mime.startsWith('video/') || ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) type = 'video';
+    else if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'aac', 'wma'].includes(ext)) type = 'audio';
+    else if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) type = 'image';
+    else if (['md', 'txt', 'markdown'].includes(ext)) type = 'markdown';
+
+    if (!type) {
+      toast.error('No editor available for this file type');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.storage
+        .from('user-files')
+        .createSignedUrl(file.storage_path, 3600, { download: false });
+      if (error) throw error;
+
+      setEditFile(file);
+      setEditFileUrl(data.signedUrl);
+      setEditType(type);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load file for editing');
+    }
+  };
+
   const handleExtractZip = async (fileId: string) => {
     const file = files.find(f => f.id === fileId);
     if (!file) return;
