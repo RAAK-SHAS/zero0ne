@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive, Star } from 'lucide-react';
+import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive, Star, Pencil } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -34,6 +34,7 @@ interface FileListProps {
   onVersionHistory: (fileId: string) => void;
   onExtractZip?: (fileId: string) => void;
   onToggleFavorite?: (fileId: string, current: boolean) => void;
+  onEdit?: (fileId: string) => void;
 }
 
 const isArchiveFile = (fileName: string): boolean => /\.(zip|rar|7z|tar|gz|bz2|xz|tgz)$/i.test(fileName);
@@ -52,7 +53,7 @@ const getAutoTag = (name: string, mimeType: string | null): string | null => {
 
 const FileRow = memo(({
   file, isSelected, onSelectFile, onDownload, onShare, onDelete, onRename,
-  onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite,
+  onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit,
 }: {
   file: FileItem;
   isSelected: boolean;
@@ -66,8 +67,10 @@ const FileRow = memo(({
   onVersionHistory: (fileId: string) => void;
   onExtractZip?: (fileId: string) => void;
   onToggleFavorite?: (fileId: string, current: boolean) => void;
+  onEdit?: (fileId: string) => void;
 }) => {
   const autoTag = getAutoTag(file.name, file.mime_type);
+  const isEditable = /\.(pdf|mp4|webm|mov|avi|mkv|mp3|wav|ogg|flac|aac|wma|jpg|jpeg|png|gif|webp|bmp|svg|md|txt|markdown)$/i.test(file.name);
   const handleCheckboxChange = useCallback(() => onSelectFile(file.id), [file.id, onSelectFile]);
   const handlePreviewClick = useCallback(() => onPreview(file.id), [file.id, onPreview]);
   const handleFavoriteClick = useCallback((e: React.MouseEvent) => {
@@ -133,6 +136,7 @@ const FileRow = memo(({
           <DropdownMenuItem onClick={() => onShare(file.id)}><Share2 className="h-4 w-4 mr-2" /> Share</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onRename(file.id)}><Edit2 className="h-4 w-4 mr-2" /> Rename</DropdownMenuItem>
+          {isEditable && onEdit && <DropdownMenuItem onClick={() => onEdit(file.id)}><Pencil className="h-4 w-4 mr-2" /> Edit File</DropdownMenuItem>}
           <DropdownMenuItem onClick={() => onVersionHistory(file.id)}><Clock className="h-4 w-4 mr-2" /> Version History</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onEncrypt(file.id)}><Lock className="h-4 w-4 mr-2" /> {file.is_encrypted ? 'Decrypt' : 'Encrypt'}</DropdownMenuItem>
           {isArchiveFile(file.name) && onExtractZip && (
@@ -150,7 +154,7 @@ FileRow.displayName = 'FileRow';
 
 export const FileList = memo(({
   files, selectedFiles, onSelectFile, onSelectAll, onDownload, onShare,
-  onDelete, onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite
+  onDelete, onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit
 }: FileListProps) => {
   if (files.length === 0) {
     return (
@@ -181,6 +185,7 @@ export const FileList = memo(({
             onDelete={onDelete} onRename={onRename} onPreview={onPreview}
             onEncrypt={onEncrypt} onVersionHistory={onVersionHistory}
             onExtractZip={onExtractZip} onToggleFavorite={onToggleFavorite}
+            onEdit={onEdit}
           />
         ))}
       </div>

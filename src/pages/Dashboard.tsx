@@ -41,6 +41,11 @@ import { CommandPalette, useCommandPalette } from '@/components/CommandPalette';
 import { SystemLog, useSystemLog } from '@/components/SystemLog';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
+import { PDFEditor } from '@/components/editors/PDFEditor';
+import { VideoEditor } from '@/components/editors/VideoEditor';
+import { AudioEditor } from '@/components/editors/AudioEditor';
+import { ImageEditor } from '@/components/editors/ImageEditor';
+import { MarkdownEditor } from '@/components/editors/MarkdownEditor';
 import { 
   Upload, Cloud, LogOut, Trash2, FolderPlus, Star, BarChart3,
   Activity, EyeOff, Menu, Terminal, Search
@@ -112,6 +117,9 @@ const Dashboard = () => {
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<FileTypeCategory>('all');
   const [previewArchiveFile, setPreviewArchiveFile] = useState<FileItem | null>(null);
+  const [editFile, setEditFile] = useState<FileItem | null>(null);
+  const [editFileUrl, setEditFileUrl] = useState<string | null>(null);
+  const [editType, setEditType] = useState<'pdf' | 'video' | 'audio' | 'image' | 'markdown' | null>(null);
   
   const { addFiles, isUploading, uploads, resumeUpload, cancelUpload, getPausedUploadsNeedingFile } = useUploadManager();
   const { downloadFile, downloadMultipleAsZip } = useDownloadManager();
@@ -415,6 +423,39 @@ const Dashboard = () => {
   const handleBatchDelete = () => {
     if (selectedFiles.length > 0) {
       setDeleteFileId(selectedFiles[0]);
+    }
+  };
+
+  const handleEdit = async (fileId: string) => {
+    const file = files.find(f => f.id === fileId);
+    if (!file) return;
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const mime = file.mime_type || '';
+
+    let type: 'pdf' | 'video' | 'audio' | 'image' | 'markdown' | null = null;
+    if (mime.includes('pdf') || ext === 'pdf') type = 'pdf';
+    else if (mime.startsWith('video/') || ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) type = 'video';
+    else if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'aac', 'wma'].includes(ext)) type = 'audio';
+    else if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) type = 'image';
+    else if (['md', 'txt', 'markdown'].includes(ext)) type = 'markdown';
+
+    if (!type) {
+      toast.error('No editor available for this file type');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.storage
+        .from('user-files')
+        .createSignedUrl(file.storage_path, 3600, { download: false });
+      if (error) throw error;
+
+      setEditFile(file);
+      setEditFileUrl(data.signedUrl);
+      setEditType(type);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load file for editing');
     }
   };
 
@@ -781,6 +822,7 @@ const Dashboard = () => {
                     onVersionHistory={(id) => setVersionHistoryFileId(id)}
                     onExtractZip={handleExtractZip}
                     onToggleFavorite={handleToggleFavorite}
+                    onEdit={handleEdit}
                   />
                 ) : (
                   <FileGrid
@@ -796,6 +838,7 @@ const Dashboard = () => {
                     onVersionHistory={(id) => setVersionHistoryFileId(id)}
                     onExtractZip={handleExtractZip}
                     onToggleFavorite={handleToggleFavorite}
+                    onEdit={handleEdit}
                   />
                 )}
               </motion.div>
@@ -948,6 +991,38 @@ const Dashboard = () => {
           }
           loadData();
         }}
+      />
+
+      {/* Editors */}
+      <PDFEditor
+        file={editType === 'pdf' ? editFile : null}
+        fileUrl={editType === 'pdf' ? editFileUrl : null}
+        open={editType === 'pdf'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+      />
+      <VideoEditor
+        file={editType === 'video' ? editFile : null}
+        fileUrl={editType === 'video' ? editFileUrl : null}
+        open={editType === 'video'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+      />
+      <AudioEditor
+        file={editType === 'audio' ? editFile : null}
+        fileUrl={editType === 'audio' ? editFileUrl : null}
+        open={editType === 'audio'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+      />
+      <ImageEditor
+        file={editType === 'image' ? editFile : null}
+        fileUrl={editType === 'image' ? editFileUrl : null}
+        open={editType === 'image'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
+      />
+      <MarkdownEditor
+        file={editType === 'markdown' ? editFile : null}
+        fileUrl={editType === 'markdown' ? editFileUrl : null}
+        open={editType === 'markdown'}
+        onClose={() => { setEditFile(null); setEditFileUrl(null); setEditType(null); }}
       />
     </div>
   );

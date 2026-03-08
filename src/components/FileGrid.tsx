@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { Star, MoreHorizontal, Download, Share, Trash2, Edit2, Eye, Lock, History, Archive } from 'lucide-react';
+import { Star, MoreHorizontal, Download, Share, Trash2, Edit2, Eye, Lock, History, Archive, Pencil } from 'lucide-react';
 import { formatBytes } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { FileIcon } from '@/components/FileIcon';
@@ -35,6 +35,7 @@ interface FileGridProps {
   onVersionHistory?: (fileId: string) => void;
   onExtractZip?: (fileId: string) => void;
   onToggleFavorite?: (fileId: string, current: boolean) => void;
+  onEdit?: (fileId: string) => void;
 }
 
 // Generate AI-like auto tag from mime type
@@ -54,7 +55,7 @@ const getAutoTag = (name: string, mimeType: string | null): string | null => {
 
 const FileCard = memo(({
   file, isSelected, onSelectFile, onDownload, onShare, onDelete, onRename,
-  onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite,
+  onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit,
 }: {
   file: FileItem;
   isSelected: boolean;
@@ -68,8 +69,10 @@ const FileCard = memo(({
   onVersionHistory?: (fileId: string) => void;
   onExtractZip?: (fileId: string) => void;
   onToggleFavorite?: (fileId: string, current: boolean) => void;
+  onEdit?: (fileId: string) => void;
 }) => {
   const isArchive = /\.(zip|rar|7z|tar|gz|bz2|xz|tgz)$/i.test(file.name);
+  const isEditable = /\.(pdf|mp4|webm|mov|avi|mkv|mp3|wav|ogg|flac|aac|wma|jpg|jpeg|png|gif|webp|bmp|svg|md|txt|markdown)$/i.test(file.name);
   const autoTag = getAutoTag(file.name, file.mime_type);
 
   const handleSelect = useCallback(() => onSelectFile(file.id), [file.id, onSelectFile]);
@@ -110,6 +113,7 @@ const FileCard = memo(({
             <DropdownMenuItem onClick={() => onShare(file.id)}><Share className="h-4 w-4 mr-2" />Share</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onRename(file.id)}><Edit2 className="h-4 w-4 mr-2" />Rename</DropdownMenuItem>
+            {isEditable && onEdit && <DropdownMenuItem onClick={() => onEdit(file.id)}><Pencil className="h-4 w-4 mr-2" />Edit File</DropdownMenuItem>}
             {onEncrypt && <DropdownMenuItem onClick={() => onEncrypt(file.id)}><Lock className="h-4 w-4 mr-2" />{file.is_encrypted ? 'Decrypt' : 'Encrypt'}</DropdownMenuItem>}
             {onVersionHistory && <DropdownMenuItem onClick={() => onVersionHistory(file.id)}><History className="h-4 w-4 mr-2" />Version History</DropdownMenuItem>}
             {isArchive && onExtractZip && <DropdownMenuItem onClick={() => onExtractZip(file.id)}><Archive className="h-4 w-4 mr-2" />Extract</DropdownMenuItem>}
@@ -166,7 +170,7 @@ FileCard.displayName = 'FileCard';
 
 export const FileGrid = memo(({
   files, selectedFiles, onSelectFile, onDownload, onShare, onDelete,
-  onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite,
+  onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit,
 }: FileGridProps) => {
   if (files.length === 0) {
     return (
@@ -197,6 +201,7 @@ export const FileGrid = memo(({
           onVersionHistory={onVersionHistory}
           onExtractZip={onExtractZip}
           onToggleFavorite={onToggleFavorite}
+          onEdit={onEdit}
         />
       ))}
     </div>
