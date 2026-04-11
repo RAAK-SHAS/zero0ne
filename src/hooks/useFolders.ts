@@ -97,9 +97,9 @@ export const useFolders = (userId: string | undefined) => {
           parent_id: parentId,
         });
 
-      if (error) throw error;
       toast.success('Folder created');
-      return data;
+      await loadFolders();
+      return true;
     } catch (error: any) {
       toast.error(error.message || 'Failed to create folder');
       return null;
