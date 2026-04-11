@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/context-menu';
 import type { Folder as FolderType } from '@/hooks/useFolders';
 import { cn } from '@/lib/utils';
+import { useState, useCallback } from 'react';
 
 interface FolderGridProps {
   folders: FolderType[];
@@ -20,12 +21,16 @@ interface FolderGridProps {
   onRemoveLock?: (folderId: string) => void;
   onChangePassword?: (folderId: string) => void;
   isFolderUnlocked?: (folderId: string) => boolean;
+  onDropFiles?: (fileIds: string[], folderId: string) => void;
 }
 
 export const FolderGrid = ({
   folders, onOpen, onRename, onDelete, onToggleHidden,
   onLock, onUnlock, onRemoveLock, onChangePassword, isFolderUnlocked,
+  onDropFiles,
 }: FolderGridProps) => {
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
   if (folders.length === 0) return null;
 
   const handleOpen = (folder: FolderType) => {
@@ -33,6 +38,30 @@ export const FolderGrid = ({
       onUnlock?.(folder.id);
     } else {
       onOpen(folder.id);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(folderId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault();
+    setDragOverId(null);
+    const data = e.dataTransfer.getData('application/x-file-ids');
+    if (data && onDropFiles) {
+      try {
+        const fileIds = JSON.parse(data) as string[];
+        if (fileIds.length > 0) {
+          onDropFiles(fileIds, folderId);
+        }
+      } catch {}
     }
   };
 
@@ -68,15 +97,20 @@ export const FolderGrid = ({
                 "group relative rounded-xl p-4 cursor-pointer transition-all duration-300",
                 folder.is_hidden
                   ? "bg-muted/20 neon-border opacity-40 hover:opacity-70"
-                  : "bg-card/50 neon-border hover:bg-card hover:neon-glow"
+                  : "bg-card/50 neon-border hover:bg-card hover:neon-glow",
+                dragOverId === folder.id && "ring-2 ring-primary bg-primary/10 scale-105"
               )}
               onDoubleClick={() => handleOpen(folder)}
+              onDragOver={(e) => handleDragOver(e, folder.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, folder.id)}
             >
               <div className="flex flex-col items-center gap-2">
                 <div className="relative">
                   <div className={cn(
                     "h-12 w-12 rounded-xl flex items-center justify-center transition-colors",
-                    folder.is_hidden ? "bg-muted-foreground/10" : "bg-primary/10"
+                    folder.is_hidden ? "bg-muted-foreground/10" : "bg-primary/10",
+                    dragOverId === folder.id && "bg-primary/20"
                   )}>
                     <Folder className={cn("h-6 w-6", folder.is_hidden ? "text-muted-foreground" : "text-primary")} />
                   </div>
