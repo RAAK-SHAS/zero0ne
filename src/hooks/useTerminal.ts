@@ -720,7 +720,33 @@ Available Commands:
         }
 
         default: {
-          collectLine('error', `Command not found: ${command}. Type 'help' for available commands.`);
+          // Try extended Linux commands
+          const extHandler = getExtendedCommandHandler(command);
+          if (extHandler) {
+            const { flags: parsedFlags, positional } = parseFlags(args);
+            const extOutput = await extHandler({
+              args: positional,
+              flags: parsedFlags,
+              rawArgs: args.join(' '),
+              collectLine,
+              getCurrentFolderFiles,
+              getCurrentFolderSubfolders,
+              resolveFileName,
+              resolveFolderName,
+              getPathString,
+              files,
+              folders,
+              userId,
+              pipedInput,
+              formatSize,
+              formatDate,
+              callbacks,
+              termState: termState.current,
+            });
+            outputLines.push(...extOutput);
+          } else {
+            collectLine('error', `Command not found: ${command}. Type 'help' for available commands.`);
+          }
         }
       }
     } catch (err: any) {
