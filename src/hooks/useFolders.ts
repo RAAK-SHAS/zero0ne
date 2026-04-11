@@ -89,15 +89,13 @@ export const useFolders = (userId: string | undefined) => {
     if (!userId) return null;
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('folders')
         .insert({
           user_id: userId,
           name,
           parent_id: parentId,
-        })
-        .select()
-        .single();
+        });
 
       if (error) throw error;
       toast.success('Folder created');
