@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getExtendedCommandHandler, parseFlags, EXTENDED_COMMANDS } from './useTerminalCommands';
 
 export interface TerminalLine {
   id: string;
@@ -15,12 +16,8 @@ interface TerminalState {
 }
 
 const COMMAND_ALIASES: Record<string, string> = {
-  rm: 'delete',
   ll: 'ls',
   dir: 'ls',
-  cat: 'preview',
-  cp: 'copy',
-  mv: 'move',
   dl: 'download',
   ul: 'upload',
 };
@@ -30,7 +27,8 @@ const ALL_COMMANDS = [
   'rename', 'move', 'copy', 'delete', 'trash', 'restore', 'mkdir', 'rmdir',
   'clear', 'share', 'unshare', 'link', 'find', 'search', 'type',
   'help', 'whoami', 'du', 'history', 'ai',
-];
+  ...EXTENDED_COMMANDS,
+].filter((v, i, a) => a.indexOf(v) === i);
 
 export const useTerminal = (
   userId: string | undefined,
@@ -209,14 +207,17 @@ Available Commands:
     cd <folder>           Change directory (cd .. to go up)
     pwd                   Print working directory
     tree                  Show folder structure
+    pushd / popd / dirs   Directory stack navigation
 
   File Operations
     download <file>       Download a file
     open <file>           Preview/open a file
-    preview <file>        Preview a file
+    cat <file>            View file content
+    head / tail           Show first/last lines
     rename <file>         Rename a file
     delete <file>         Move file to trash
-    trash <file>          Move file to trash
+    touch <file>          Create a file (via upload)
+    stat <file>           Show file details
 
   Folder Operations
     mkdir <name>          Create a new folder
@@ -224,28 +225,43 @@ Available Commands:
     
   Sharing
     share <file>          Share a file and get link
-    link <file>           Share a file and get link
 
-  Search
+  Search & Filter
     find <name>           Find files by name
     search <keyword>      Search files by keyword
+    locate <name>         Search all files
+    grep <pattern>        Search with regex
     type <category>       Filter by type (image/pdf/video/audio/doc)
+    which / whereis       Locate commands
+
+  Text Processing (use with pipes)
+    sort, uniq, wc, cut, awk, sed, tr, grep, head, tail, nl, tac
+
+  Compression
+    tar, gzip, zip, unzip (managed via archive UI)
+
+  System Info
+    whoami, du, df, stat, file, lsblk, mount, lsof, lsattr
+
+  Permissions (simulated)
+    chmod, chown, chgrp, umask
 
   Utilities
     clear                 Clear terminal
-    whoami                Show current user
-    du                    Show disk usage
+    echo <text>           Print text
     history               Show command history
     upload                Open upload dialog
+    tee                   Pass through pipe data
 
   AI Assistant
     ai <query>            Natural language file commands
     
   Piping
-    cmd1 | cmd2           Pipe output of cmd1 to cmd2
+    cmd1 | cmd2           Pipe output between commands
     find report | delete  Find files then delete matches
+    ls | grep pdf | wc    Chain multiple commands
 
-  Aliases: rm=delete, ll=ls, dir=ls, cp=copy, mv=move, dl=download
+  Aliases: ll=ls, dir=ls, dl=download, ul=upload
 ─────────────────────────────────────────`);
           break;
         }
@@ -722,7 +738,33 @@ Available Commands:
         }
 
         default: {
-          collectLine('error', `Command not found: ${command}. Type 'help' for available commands.`);
+          // Try extended Linux commands
+          const extHandler = getExtendedCommandHandler(command);
+          if (extHandler) {
+            const { flags: parsedFlags, positional } = parseFlags(args);
+            const extOutput = await extHandler({
+              args: positional,
+              flags: parsedFlags,
+              rawArgs: args.join(' '),
+              collectLine,
+              getCurrentFolderFiles,
+              getCurrentFolderSubfolders,
+              resolveFileName,
+              resolveFolderName,
+              getPathString,
+              files,
+              folders,
+              userId,
+              pipedInput,
+              formatSize,
+              formatDate,
+              callbacks,
+              termState: termState.current,
+            });
+            outputLines.push(...extOutput);
+          } else {
+            collectLine('error', `Command not found: ${command}. Type 'help' for available commands.`);
+          }
         }
       }
     } catch (err: any) {

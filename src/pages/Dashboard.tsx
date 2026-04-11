@@ -843,6 +843,11 @@ const Dashboard = () => {
                     onRemoveLock={(id) => { setLockFolderId(id); setLockAction('remove_lock'); }}
                     onChangePassword={(id) => { setLockFolderId(id); setLockAction('change_password'); }}
                     isFolderUnlocked={isFolderUnlocked}
+                    onDropFiles={async (fileIds, folderId) => {
+                      await moveToFolder(fileIds, folderId);
+                      logActivity('move', 'file', null, `Moved ${fileIds.length} file(s)`);
+                      loadData();
+                    }}
                   />
                 )}
                 
