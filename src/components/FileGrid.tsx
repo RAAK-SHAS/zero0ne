@@ -82,6 +82,11 @@ const FileCard = memo(({
     onToggleFavorite?.(file.id, file.is_favorite || false);
   }, [file.id, file.is_favorite, onToggleFavorite]);
 
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    e.dataTransfer.setData('application/x-file-ids', JSON.stringify([file.id]));
+    e.dataTransfer.effectAllowed = 'move';
+  }, [file.id]);
+
   return (
     <div
       className={cn(
@@ -89,6 +94,8 @@ const FileCard = memo(({
         "bg-card/50 neon-border hover:bg-card hover:neon-glow",
         isSelected && "ring-1 ring-primary/50 bg-primary/5"
       )}
+      draggable
+      onDragStart={handleDragStart}
       onClick={handleSelect}
       onDoubleClick={handlePreview}
     >
