@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getExtendedCommandHandler, parseFlags, EXTENDED_COMMANDS } from './useTerminalCommands';
 
 export interface TerminalLine {
   id: string;
@@ -15,12 +16,8 @@ interface TerminalState {
 }
 
 const COMMAND_ALIASES: Record<string, string> = {
-  rm: 'delete',
   ll: 'ls',
   dir: 'ls',
-  cat: 'preview',
-  cp: 'copy',
-  mv: 'move',
   dl: 'download',
   ul: 'upload',
 };
@@ -30,7 +27,8 @@ const ALL_COMMANDS = [
   'rename', 'move', 'copy', 'delete', 'trash', 'restore', 'mkdir', 'rmdir',
   'clear', 'share', 'unshare', 'link', 'find', 'search', 'type',
   'help', 'whoami', 'du', 'history', 'ai',
-];
+  ...EXTENDED_COMMANDS,
+].filter((v, i, a) => a.indexOf(v) === i);
 
 export const useTerminal = (
   userId: string | undefined,
