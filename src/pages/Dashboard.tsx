@@ -387,7 +387,7 @@ const Dashboard = () => {
   const handleCreateFolder = async (name: string) => {
     const result = await createFolder(name, currentFolderId);
     if (result) {
-      logActivity('folder_create', 'folder', result.id, name);
+      logActivity('folder_create', 'folder', null, name);
     }
     return result;
   };
