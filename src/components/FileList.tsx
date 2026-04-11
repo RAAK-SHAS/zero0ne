@@ -78,6 +78,11 @@ const FileRow = memo(({
     onToggleFavorite?.(file.id, file.is_favorite || false);
   }, [file.id, file.is_favorite, onToggleFavorite]);
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/x-file-ids', JSON.stringify([file.id]));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
   return (
     <div
       className={cn(
@@ -85,6 +90,8 @@ const FileRow = memo(({
         "hover:bg-accent/30 hover:neon-border",
         isSelected && "bg-primary/5 neon-border"
       )}
+      draggable
+      onDragStart={handleDragStart}
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <Checkbox
