@@ -797,13 +797,14 @@ Available Commands:
         for (let i = 0; i < pipeSegments.length; i++) {
           const segment = pipeSegments[i].trim();
           if (!segment) continue;
+          const isLast = i === pipeSegments.length - 1;
           
           if (i === 0) {
-            // First command: execute normally, collect output
-            pipedOutput = await executeSingleCommand(segment, true, []);
+            // First command: execute, suppress visual output if not last
+            pipedOutput = await executeSingleCommand(segment, true, [], !isLast);
           } else {
-            // Subsequent commands: pass piped output
-            pipedOutput = await executeSingleCommand(segment, true, pipedOutput);
+            // Subsequent commands: pass piped output, suppress if not last
+            pipedOutput = await executeSingleCommand(segment, true, pipedOutput, !isLast);
           }
         }
       } else {
