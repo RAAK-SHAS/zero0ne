@@ -204,68 +204,122 @@ export const useTerminal = (
         case 'help': {
           collectLine('info', `
 Available Commands:
-─────────────────────────────────────────
-  Navigation
-    ls                    List files in current directory
-    cd <folder>           Change directory (cd .. to go up)
-    pwd                   Print working directory
-    tree                  Show folder structure
-    pushd / popd / dirs   Directory stack navigation
+═══════════════════════════════════════════════════════
 
-  File Operations
+  📂 Navigation
+    ls                    List files & folders in current directory
+    cd <folder>           Change directory (cd .. to go up, cd / for root)
+    pwd                   Print working directory path
+    tree                  Show folder hierarchy as a tree
+    pushd <dir>           Push directory onto stack and navigate
+    popd                  Pop directory stack and return
+    dirs                  Show current directory stack
+
+  📄 File Viewing
+    cat <file>            View/open a file
+    tac                   Reverse lines of piped input
+    nl                    Number lines of input
+    head [-n N]           Show first N lines (default 10)
+    tail [-n N]           Show last N lines (default 10)
+    less / more           Pager (redirects to cat/head/tail)
+    od / xxd / hexdump    Hex dump (simulated)
+    strings               Extract printable strings (simulated)
+
+  ✏️ File Operations
+    touch <file>          Create file (opens upload dialog)
     download <file>       Download a file
     open <file>           Preview/open a file
-    cat <file>            View file content
-    head / tail           Show first/last lines
     rename <file>         Rename a file
     delete <file>         Move file to trash
-    touch <file>          Create a file (via upload)
-    stat <file>           Show file details
+    cp <src> <dst>        Copy a file (simulated)
+    mv <src> <dst>        Move a file to folder
+    rm <file>             Remove a file (moves to trash)
+    unlink <file>         Remove a file (alias for rm)
 
-  Folder Operations
+  📁 Folder Operations
     mkdir <name>          Create a new folder
-    rmdir <folder>        Delete a folder
-    
-  Sharing
+    rmdir <folder>        Delete an empty folder
+
+  🔍 Search & Filter
+    find <name>           Find files by name pattern
+    search <keyword>      Search files by keyword
+    grep <pattern>        Filter with regex (use -i for case-insensitive)
+    locate <name>         Search all files by name
+    which <cmd>           Show command path
+    whereis <cmd>         Locate command binary
+    type <category>       Filter by type (image/pdf/video/audio/doc)
+
+  📊 File Information
+    stat <file>           Show detailed file/folder metadata
+    file <name>           Show file MIME type
+    du                    Show storage usage summary
+    df                    Show filesystem disk space
+    basename <path>       Strip directory from path
+    dirname <path>        Strip filename from path
+    realpath <path>       Resolve path
+    readlink <path>       Read symbolic link target
+
+  📝 Text Processing (use with pipes)
+    grep <pattern>        Search lines matching regex (-i -v -c -n)
+    sort                  Sort lines (-r reverse, -n numeric, -u unique)
+    uniq                  Remove duplicate adjacent lines (-c count, -d dupes)
+    wc                    Count lines, words, chars (-l -w -c)
+    cut -f N -d D         Cut fields from lines
+    awk '{print $N}'      Extract fields from lines
+    sed 's/old/new/g'     Stream edit / replace text
+    tr <from> <to>        Translate/replace characters
+    tac                   Reverse line order
+    nl                    Add line numbers
+    head / tail           First/last N lines
+    fold / fmt            Format text width (simulated)
+    echo <text>           Print text to output
+    tee                   Pass through and display pipe data
+
+  🔗 Sharing
     share <file>          Share a file and get link
 
-  Search & Filter
-    find <name>           Find files by name
-    search <keyword>      Search files by keyword
-    locate <name>         Search all files
-    grep <pattern>        Search with regex
-    type <category>       Filter by type (image/pdf/video/audio/doc)
-    which / whereis       Locate commands
+  🗜️ Compression (simulated)
+    tar, gzip, gunzip, zcat, bzip2, xz, zip, unzip
 
-  Text Processing (use with pipes)
-    sort, uniq, wc, cut, awk, sed, tr, grep, head, tail, nl, tac
+  🔒 Permissions (simulated)
+    chmod <mode> <file>   Change file mode
+    chown <user> <file>   Change file owner
+    chgrp <group> <file>  Change file group
+    umask                 Show file creation mask
+    chattr / lsattr       Change/list file attributes
+    setfacl / getfacl     Set/get file access control lists
 
-  Compression
-    tar, gzip, zip, unzip (managed via archive UI)
+  🔗 Links (simulated)
+    ln / link             Create links (use 'share' instead)
 
-  System Info
-    whoami, du, df, stat, file, lsblk, mount, lsof, lsattr
+  💽 Disk Info (simulated)
+    mount / umount        Show/manage mounts
+    lsblk / blkid         List block devices
+    sync                  Sync filesystem
 
-  Permissions (simulated)
-    chmod, chown, chgrp, umask
+  🔧 Advanced Utilities (simulated)
+    rsync, watch, lsof, fuser, dd, shred
+    inotifywait, inotifywatch, filefrag
+    flock, lockfile, xargs
+    setfattr, getfattr, attr
 
-  Utilities
-    clear                 Clear terminal
-    echo <text>           Print text
+  🖥️ System
+    whoami                Show current user info
     history               Show command history
-    upload                Open upload dialog
-    tee                   Pass through pipe data
+    clear                 Clear terminal screen
 
-  AI Assistant
+  🤖 AI Assistant
     ai <query>            Natural language file commands
-    
-  Piping
+
+  🔀 Piping & Chaining
     cmd1 | cmd2           Pipe output between commands
-    find report | delete  Find files then delete matches
-    ls | grep pdf | wc    Chain multiple commands
+    ls | grep pdf         Filter file listing
+    ls | sort | head      Sort files and show top 10
+    echo hello | wc       Count words in text
+    find report | wc -l   Count matching files
 
   Aliases: ll=ls, dir=ls, dl=download, ul=upload
-─────────────────────────────────────────`);
+═══════════════════════════════════════════════════════`);
           break;
         }
 
