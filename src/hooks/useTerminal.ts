@@ -313,25 +313,26 @@ Available Commands:
             break;
           }
 
-          let output = '';
+          const lsLines: string[] = [];
           
           if (subfolders.length > 0) {
-            output += subfolders.map(f => `  📁 ${f.name}/`).join('\n') + '\n';
+            subfolders.forEach(f => lsLines.push(`  📁 ${f.name}/`));
           }
           
           if (currentFiles.length > 0) {
             const maxNameLen = Math.max(...currentFiles.map(f => f.name.length), 10);
-            output += currentFiles.map(f => {
+            currentFiles.forEach(f => {
               const name = f.name.padEnd(maxNameLen + 2);
               const size = formatSize(f.size_bytes).padStart(10);
               const date = formatDate(f.created_at);
               const fav = f.is_favorite ? '★' : ' ';
               const enc = f.is_encrypted ? '🔒' : ' ';
-              return `  ${fav} ${enc} ${name} ${size}  ${date}`;
-            }).join('\n');
+              lsLines.push(`  ${fav} ${enc} ${name} ${size}  ${date}`);
+            });
           }
           
-          collectLine('output', output);
+          lsLines.forEach(l => collectLine('output', l));
+          outputLines.push(...lsLines);
           collectLine('info', `${subfolders.length} folder(s), ${currentFiles.length} file(s)`);
           break;
         }
