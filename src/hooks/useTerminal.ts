@@ -171,7 +171,8 @@ export const useTerminal = (
   }, [folders]);
 
   // Internal execute that processes a single command, returns output lines
-  const executeSingleCommand = useCallback(async (rawInput: string, isPiped: boolean = false, pipedInput: string[] = []): Promise<string[]> => {
+  // isIntermediate = true means output should be suppressed (not the last pipe stage)
+  const executeSingleCommand = useCallback(async (rawInput: string, isPiped: boolean = false, pipedInput: string[] = [], isIntermediate: boolean = false): Promise<string[]> => {
     const trimmed = rawInput.trim();
     if (!trimmed) return [];
 
@@ -188,12 +189,14 @@ export const useTerminal = (
     const outputLines: string[] = [];
     const collectLine = (type: TerminalLine['type'], content: string) => {
       if (isPiped) {
-        // Only collect output lines for piping, not info/system messages
         if (type === 'output' || type === 'success') {
           outputLines.push(content);
         }
       }
-      addLine(type, content);
+      // Only render to screen if NOT an intermediate pipe stage
+      if (!isIntermediate) {
+        addLine(type, content);
+      }
     };
 
     try {
