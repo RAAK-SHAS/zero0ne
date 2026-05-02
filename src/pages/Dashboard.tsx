@@ -1029,6 +1029,7 @@ const Dashboard = () => {
       <EncryptionDialog
         fileId={encryptFileId}
         fileName={files.find(f => f.id === encryptFileId)?.name || ''}
+        storagePath={files.find(f => f.id === encryptFileId)?.storage_path}
         isEncrypted={files.find(f => f.id === encryptFileId)?.is_encrypted || false}
         open={!!encryptFileId}
         onClose={() => setEncryptFileId(null)}
