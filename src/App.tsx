@@ -18,6 +18,8 @@ import Share from "./pages/Share";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import { PWAStatus } from "./components/PWAStatus";
+import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +28,8 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <PWAStatus />
+      <KeyboardShortcutsDialog />
       <BrowserRouter>
         <AuthProvider>
           <UploadProvider>
