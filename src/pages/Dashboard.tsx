@@ -1017,11 +1017,31 @@ const Dashboard = () => {
 
       <BatchActions
         selectedCount={selectedFiles.length}
-        onDownload={handleBatchDownload}
-        onShare={handleBatchShare}
+        folders={folders}
+        currentFolderId={currentFolderId}
+        onDownloadZip={handleBatchDownloadZip}
+        onShareZip={handleBatchShare}
         onDelete={handleBatchDelete}
+        onMove={handleBatchMove}
         onClear={() => setSelectedFiles([])}
       />
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedFiles.length} files?</AlertDialogTitle>
+            <AlertDialogDescription>
+              They will be moved to Trash and permanently removed after 30 days.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBatchDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Move to Trash
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* File Delete Dialog */}
       <AlertDialog open={!!deleteFileId} onOpenChange={() => setDeleteFileId(null)}>
