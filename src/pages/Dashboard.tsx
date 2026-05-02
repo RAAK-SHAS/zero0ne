@@ -1022,8 +1022,10 @@ const Dashboard = () => {
       <VersionHistory
         fileId={versionHistoryFileId}
         fileName={files.find(f => f.id === versionHistoryFileId)?.name || ''}
+        livePath={files.find(f => f.id === versionHistoryFileId)?.storage_path}
         open={!!versionHistoryFileId}
         onClose={() => setVersionHistoryFileId(null)}
+        onRestored={loadData}
       />
 
       <EncryptionDialog
