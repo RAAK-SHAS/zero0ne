@@ -39,7 +39,7 @@ export async function encryptBlob(blob: Blob, passphrase: string): Promise<Blob>
   const key = await deriveKey(passphrase, salt);
   const plaintext = new Uint8Array(await blob.arrayBuffer());
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext)
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv as BufferSource }, key, plaintext as BufferSource)
   );
   const out = new Uint8Array(MAGIC.length + salt.length + iv.length + ciphertext.length);
   out.set(MAGIC, 0);
