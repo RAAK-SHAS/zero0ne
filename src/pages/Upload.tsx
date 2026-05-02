@@ -11,6 +11,7 @@ import { Upload as UploadIcon, ArrowLeft, X, FileIcon, FolderUp, Zap, Pause } fr
 import { useDropzone } from 'react-dropzone';
 import { formatBytes } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { CameraUploadButton } from '@/components/CameraUploadButton';
 
 const Upload = () => {
   const { user } = useAuth();
