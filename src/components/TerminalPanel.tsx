@@ -421,11 +421,19 @@ export const TerminalPanel = ({
                 </div>
               </div>
 
-              {/* Output */}
-              <div ref={scrollRef} className={cn(
-                'flex-1 overflow-y-auto px-4 py-2 font-mono text-xs leading-relaxed relative z-20',
-                t.text
-              )}>
+              {/* Output - clicking focuses the input */}
+              <div
+                ref={scrollRef}
+                onClick={(e) => {
+                  // Only refocus if user didn't select text
+                  if (window.getSelection()?.toString()) return;
+                  inputRef.current?.focus();
+                }}
+                className={cn(
+                  'flex-1 overflow-y-auto px-4 py-2 font-mono text-xs leading-relaxed relative z-20 cursor-text',
+                  t.text
+                )}
+              >
                 {lines.map(line => (
                   <div key={line.id} className={cn('whitespace-pre-wrap break-all', getLineColor(line.type))}>
                     {line.content}
