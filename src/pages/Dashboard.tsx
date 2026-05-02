@@ -438,24 +438,99 @@ const Dashboard = () => {
     setSelectedFiles(selected ? filteredAndSortedFiles.map(f => f.id) : []);
   };
 
-  const handleBatchDownload = async () => {
-    for (const fileId of selectedFiles) {
-      await handleDownload(fileId);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  const handleBatchDownloadZip = async () => {
+    if (selectedFiles.length === 0) return;
+    const sel = files.filter(f => selectedFiles.includes(f.id));
+    if (sel.length === 1) {
+      await handleDownload(sel[0].id);
+      return;
     }
-    setSelectedFiles([]);
+    toast.info(`Packaging ${sel.length} files…`);
+    try {
+      const zip = new JSZip();
+      for (const file of sel) {
+        const { data: signed, error } = await supabase.storage
+          .from('user-files')
+          .createSignedUrl(file.storage_path, 120);
+        if (error || !signed) continue;
+        const res = await fetch(signed.signedUrl);
+        if (!res.ok) continue;
+        zip.file(file.name, await res.blob());
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cloudstore-${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${sel.length} files as ZIP`);
+      setSelectedFiles([]);
+    } catch (e: any) {
+      toast.error(e.message || 'ZIP download failed');
+    }
   };
 
   const handleBatchShare = async () => {
+    if (selectedFiles.length === 0) return;
     if (selectedFiles.length === 1) {
       handleShare(selectedFiles[0]);
-    } else {
-      toast.info('Batch sharing coming soon');
+      return;
+    }
+    // Create a share link for each selected file and copy them all to clipboard
+    try {
+      const links: string[] = [];
+      for (const fileId of selectedFiles) {
+        const { data, error } = await supabase
+          .from('shares')
+          .insert({ file_id: fileId })
+          .select('token')
+          .single();
+        if (!error && data) links.push(`${window.location.origin}/share/${data.token}`);
+      }
+      await navigator.clipboard.writeText(links.join('\n'));
+      toast.success(`Created ${links.length} share links · copied to clipboard`);
+      setSelectedFiles([]);
+    } catch (e: any) {
+      toast.error(e.message || 'Batch share failed');
     }
   };
 
   const handleBatchDelete = () => {
-    if (selectedFiles.length > 0) {
-      setDeleteFileId(selectedFiles[0]);
+    if (selectedFiles.length === 0) return;
+    setBulkDeleteOpen(true);
+  };
+
+  const confirmBatchDelete = async () => {
+    try {
+      const { error } = await supabase
+        .from('files')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', selectedFiles);
+      if (error) throw error;
+      logActivity('delete', 'file', null, `Deleted ${selectedFiles.length} files`);
+      toast.success(`Moved ${selectedFiles.length} files to trash`);
+      setSelectedFiles([]);
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message || 'Bulk delete failed');
+    } finally {
+      setBulkDeleteOpen(false);
+    }
+  };
+
+  const handleBatchMove = async (folderId: string | null) => {
+    if (selectedFiles.length === 0) return;
+    try {
+      await moveToFolder(selectedFiles, folderId);
+      logActivity('move', 'file', null, `Moved ${selectedFiles.length} files`);
+      toast.success(`Moved ${selectedFiles.length} files`);
+      setSelectedFiles([]);
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message || 'Move failed');
     }
   };
 
