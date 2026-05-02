@@ -38,6 +38,8 @@ import { SortControl, SortConfig } from '@/components/SortControl';
 import { AppSidebar } from '@/components/AppSidebar';
 import { MobileNav } from '@/components/MobileNav';
 import { CommandPalette, useCommandPalette } from '@/components/CommandPalette';
+import { GlobalContentSearchDialog, useGlobalContentSearch } from '@/components/GlobalContentSearch';
+import { CameraUploadButton } from '@/components/CameraUploadButton';
 import { SystemLog, useSystemLog } from '@/components/SystemLog';
 import { TerminalPanel } from '@/components/TerminalPanel';
 import { useTerminal } from '@/hooks/useTerminal';
