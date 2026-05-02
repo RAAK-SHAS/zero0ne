@@ -70,6 +70,15 @@ export const EncryptionDialog = ({
               : `Set a password to encrypt "${fileName}"`
             }
           </p>
+
+          {!isEncrypted && (
+            <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-300">
+              <strong>Notice:</strong> This marks the file as encrypted in your account
+              metadata for organizational purposes. The underlying file bytes in storage
+              are <strong>not</strong> cryptographically encrypted at rest. Do not rely
+              on this feature for protecting highly sensitive content.
+            </div>
+          )}
           
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
