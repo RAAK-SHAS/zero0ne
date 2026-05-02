@@ -38,6 +38,8 @@ import { SortControl, SortConfig } from '@/components/SortControl';
 import { AppSidebar } from '@/components/AppSidebar';
 import { MobileNav } from '@/components/MobileNav';
 import { CommandPalette, useCommandPalette } from '@/components/CommandPalette';
+import { GlobalContentSearchDialog, useGlobalContentSearch } from '@/components/GlobalContentSearch';
+import { CameraUploadButton } from '@/components/CameraUploadButton';
 import { SystemLog, useSystemLog } from '@/components/SystemLog';
 import { TerminalPanel } from '@/components/TerminalPanel';
 import { useTerminal } from '@/hooks/useTerminal';
@@ -128,6 +130,7 @@ const Dashboard = () => {
   const { toggleFavorite } = useFavorites();
   const { logActivity } = useActivityLog(user?.id);
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
+  const { open: contentSearchOpen, setOpen: setContentSearchOpen } = useGlobalContentSearch();
   const { logs: systemLogs, addLog } = useSystemLog();
   
   const {
@@ -438,24 +441,99 @@ const Dashboard = () => {
     setSelectedFiles(selected ? filteredAndSortedFiles.map(f => f.id) : []);
   };
 
-  const handleBatchDownload = async () => {
-    for (const fileId of selectedFiles) {
-      await handleDownload(fileId);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  const handleBatchDownloadZip = async () => {
+    if (selectedFiles.length === 0) return;
+    const sel = files.filter(f => selectedFiles.includes(f.id));
+    if (sel.length === 1) {
+      await handleDownload(sel[0].id);
+      return;
     }
-    setSelectedFiles([]);
+    toast.info(`Packaging ${sel.length} files…`);
+    try {
+      const zip = new JSZip();
+      for (const file of sel) {
+        const { data: signed, error } = await supabase.storage
+          .from('user-files')
+          .createSignedUrl(file.storage_path, 120);
+        if (error || !signed) continue;
+        const res = await fetch(signed.signedUrl);
+        if (!res.ok) continue;
+        zip.file(file.name, await res.blob());
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cloudstore-${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${sel.length} files as ZIP`);
+      setSelectedFiles([]);
+    } catch (e: any) {
+      toast.error(e.message || 'ZIP download failed');
+    }
   };
 
   const handleBatchShare = async () => {
+    if (selectedFiles.length === 0) return;
     if (selectedFiles.length === 1) {
       handleShare(selectedFiles[0]);
-    } else {
-      toast.info('Batch sharing coming soon');
+      return;
+    }
+    // Create a share link for each selected file and copy them all to clipboard
+    try {
+      const links: string[] = [];
+      for (const fileId of selectedFiles) {
+        const { data, error } = await supabase
+          .from('shares')
+          .insert({ file_id: fileId })
+          .select('token')
+          .single();
+        if (!error && data) links.push(`${window.location.origin}/share/${data.token}`);
+      }
+      await navigator.clipboard.writeText(links.join('\n'));
+      toast.success(`Created ${links.length} share links · copied to clipboard`);
+      setSelectedFiles([]);
+    } catch (e: any) {
+      toast.error(e.message || 'Batch share failed');
     }
   };
 
   const handleBatchDelete = () => {
-    if (selectedFiles.length > 0) {
-      setDeleteFileId(selectedFiles[0]);
+    if (selectedFiles.length === 0) return;
+    setBulkDeleteOpen(true);
+  };
+
+  const confirmBatchDelete = async () => {
+    try {
+      const { error } = await supabase
+        .from('files')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', selectedFiles);
+      if (error) throw error;
+      logActivity('delete', 'file', null, `Deleted ${selectedFiles.length} files`);
+      toast.success(`Moved ${selectedFiles.length} files to trash`);
+      setSelectedFiles([]);
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message || 'Bulk delete failed');
+    } finally {
+      setBulkDeleteOpen(false);
+    }
+  };
+
+  const handleBatchMove = async (folderId: string | null) => {
+    if (selectedFiles.length === 0) return;
+    try {
+      await moveToFolder(selectedFiles, folderId);
+      logActivity('move', 'file', null, `Moved ${selectedFiles.length} files`);
+      toast.success(`Moved ${selectedFiles.length} files`);
+      setSelectedFiles([]);
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message || 'Move failed');
     }
   };
 
@@ -899,6 +977,12 @@ const Dashboard = () => {
 
       {/* Command Palette */}
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} onSearch={setSearchQuery} />
+      <GlobalContentSearchDialog
+        open={contentSearchOpen}
+        onOpenChange={setContentSearchOpen}
+        files={files}
+        onOpenFile={handlePreview}
+      />
 
       {/* Terminal Panel */}
       <TerminalPanel
@@ -942,11 +1026,31 @@ const Dashboard = () => {
 
       <BatchActions
         selectedCount={selectedFiles.length}
-        onDownload={handleBatchDownload}
-        onShare={handleBatchShare}
+        folders={folders}
+        currentFolderId={currentFolderId}
+        onDownloadZip={handleBatchDownloadZip}
+        onShareZip={handleBatchShare}
         onDelete={handleBatchDelete}
+        onMove={handleBatchMove}
         onClear={() => setSelectedFiles([])}
       />
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedFiles.length} files?</AlertDialogTitle>
+            <AlertDialogDescription>
+              They will be moved to Trash and permanently removed after 30 days.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBatchDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Move to Trash
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* File Delete Dialog */}
       <AlertDialog open={!!deleteFileId} onOpenChange={() => setDeleteFileId(null)}>
@@ -1022,13 +1126,16 @@ const Dashboard = () => {
       <VersionHistory
         fileId={versionHistoryFileId}
         fileName={files.find(f => f.id === versionHistoryFileId)?.name || ''}
+        livePath={files.find(f => f.id === versionHistoryFileId)?.storage_path}
         open={!!versionHistoryFileId}
         onClose={() => setVersionHistoryFileId(null)}
+        onRestored={loadData}
       />
 
       <EncryptionDialog
         fileId={encryptFileId}
         fileName={files.find(f => f.id === encryptFileId)?.name || ''}
+        storagePath={files.find(f => f.id === encryptFileId)?.storage_path}
         isEncrypted={files.find(f => f.id === encryptFileId)?.is_encrypted || false}
         open={!!encryptFileId}
         onClose={() => setEncryptFileId(null)}
