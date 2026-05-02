@@ -482,7 +482,7 @@ export const TerminalPanel = ({
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={isProcessing ? 'Processing...' : 'Type a command... (use | to pipe)'}
-                  disabled={isProcessing}
+                  readOnly={isProcessing}
                   className={cn(
                     'flex-1 bg-transparent border-none outline-none font-mono text-xs placeholder:opacity-40',
                     t.inputText
