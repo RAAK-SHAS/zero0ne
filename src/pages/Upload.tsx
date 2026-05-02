@@ -104,7 +104,7 @@ const Upload = () => {
             </div>
           </div>
 
-          <div className="flex gap-2 justify-center">
+          <div className="flex flex-wrap gap-2 justify-center">
             <input
               ref={folderInputRef}
               type="file"
@@ -119,6 +119,7 @@ const Upload = () => {
               <FolderUp className="h-4 w-4 mr-2" />
               Upload Folder
             </Button>
+            <CameraUploadButton />
           </div>
 
           <div
