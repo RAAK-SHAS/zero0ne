@@ -130,6 +130,7 @@ const Dashboard = () => {
   const { toggleFavorite } = useFavorites();
   const { logActivity } = useActivityLog(user?.id);
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
+  const { open: contentSearchOpen, setOpen: setContentSearchOpen } = useGlobalContentSearch();
   const { logs: systemLogs, addLog } = useSystemLog();
   
   const {
