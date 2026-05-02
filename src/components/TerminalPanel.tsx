@@ -161,6 +161,28 @@ export const TerminalPanel = ({
     }
   }, [isOpen]);
 
+  // Refocus input after a command finishes processing
+  // (the input is disabled during processing which causes the browser to blur it)
+  const wasProcessing = useRef(false);
+  useEffect(() => {
+    if (wasProcessing.current && !isProcessing && isOpen) {
+      // Wait a tick so the disabled attribute is cleared in the DOM
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+    wasProcessing.current = isProcessing;
+  }, [isProcessing, isOpen]);
+
+  // Also refocus when new output lines arrive (covers fast commands)
+  useEffect(() => {
+    if (isOpen && document.activeElement !== inputRef.current) {
+      const active = document.activeElement;
+      // Don't steal focus from other interactive elements (buttons, dialogs, etc.)
+      if (!active || active === document.body) {
+        inputRef.current?.focus();
+      }
+    }
+  }, [lines, isOpen]);
+
   // Tab autocomplete
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Tab') {
