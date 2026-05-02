@@ -14,23 +14,22 @@ const EXECUTION_TIMEOUT_RUN = 5000; // 5s run timeout
 
 // Suspicious patterns that could indicate abuse
 const SUSPICIOUS_PATTERNS = [
-  /while\s*\(\s*true\s*\)/gi,           // Infinite loops
-  /for\s*\(\s*;\s*;\s*\)/gi,            // Infinite for loops
-  /eval\s*\(/gi,                         // Eval usage
-  /exec\s*\(/gi,                         // Command execution
-  /spawn\s*\(/gi,                        // Process spawning
-  /child_process/gi,                     // Child process module
-  /require\s*\(\s*['"]fs['"]\s*\)/gi,   // File system access
-  /require\s*\(\s*['"]net['"]\s*\)/gi,  // Network module
-  /import\s+.*from\s+['"]fs['"]/gi,     // FS import
-  /import\s+.*from\s+['"]net['"]/gi,    // Net import
-  /XMLHttpRequest|fetch\s*\(/gi,         // Network requests in client code
-  /crypto\s*\.\s*subtle/gi,              // Crypto operations (mining indicator)
-  /WebSocket/gi,                         // WebSocket connections
-  /Worker\s*\(/gi,                       // Web workers
+  /while\s*\(\s*true\s*\)/gi,
+  /for\s*\(\s*;\s*;\s*\)/gi,
+  /eval\s*\(/gi,
+  /exec\s*\(/gi,
+  /spawn\s*\(/gi,
+  /child_process/gi,
+  /require\s*\(\s*['"]fs['"]\s*\)/gi,
+  /require\s*\(\s*['"]net['"]\s*\)/gi,
+  /import\s+.*from\s+['"]fs['"]/gi,
+  /import\s+.*from\s+['"]net['"]/gi,
+  /XMLHttpRequest|fetch\s*\(/gi,
+  /crypto\s*\.\s*subtle/gi,
+  /WebSocket/gi,
+  /Worker\s*\(/gi,
 ];
 
-// Language mapping for Piston API
 const languageMap: Record<string, { language: string; version: string }> = {
   'javascript': { language: 'javascript', version: '18.15.0' },
   'js': { language: 'javascript', version: '18.15.0' },
@@ -57,77 +56,40 @@ const languageMap: Record<string, { language: string; version: string }> = {
   'sh': { language: 'bash', version: '5.2.0' },
 };
 
-// In-memory rate limiting (per instance - for production, use Redis/DB)
 const rateLimitCache = new Map<string, { count: number; resetTime: number }>();
 
 function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
   const now = Date.now();
   const hourInMs = 60 * 60 * 1000;
-  
   let userLimit = rateLimitCache.get(userId);
-  
-  // Reset if expired
   if (!userLimit || now >= userLimit.resetTime) {
     userLimit = { count: 0, resetTime: now + hourInMs };
     rateLimitCache.set(userId, userLimit);
   }
-  
   const remaining = MAX_EXECUTIONS_PER_HOUR - userLimit.count;
   const resetIn = Math.ceil((userLimit.resetTime - now) / 1000);
-  
   if (userLimit.count >= MAX_EXECUTIONS_PER_HOUR) {
     return { allowed: false, remaining: 0, resetIn };
   }
-  
   userLimit.count++;
   return { allowed: true, remaining: remaining - 1, resetIn };
 }
 
 function validateCode(code: string): { valid: boolean; error?: string } {
-  // Check code size
   const codeBytes = new TextEncoder().encode(code).length;
   if (codeBytes > MAX_CODE_SIZE_BYTES) {
-    return { 
-      valid: false, 
-      error: `Code exceeds maximum size of ${MAX_CODE_SIZE_BYTES / 1024}KB (received ${(codeBytes / 1024).toFixed(2)}KB)` 
-    };
+    return { valid: false, error: `Code exceeds maximum size of ${MAX_CODE_SIZE_BYTES / 1024}KB` };
   }
-  
-  // Check for empty code
   if (!code || code.trim().length === 0) {
     return { valid: false, error: 'Code cannot be empty' };
   }
-  
-  // Check for suspicious patterns
   for (const pattern of SUSPICIOUS_PATTERNS) {
     if (pattern.test(code)) {
-      // Reset the regex lastIndex for global patterns
       pattern.lastIndex = 0;
-      return { 
-        valid: false, 
-        error: 'Code contains potentially dangerous patterns that are not allowed for security reasons' 
-      };
+      return { valid: false, error: 'Code contains potentially dangerous patterns that are not allowed for security reasons' };
     }
   }
-  
   return { valid: true };
-}
-
-function getUserIdFromJwt(authHeader: string | null): string | null {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-  
-  try {
-    const token = authHeader.split(' ')[1];
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    
-    const payload = JSON.parse(atob(parts[1]));
-    return payload.sub || null;
-  } catch {
-    return null;
-  }
 }
 
 serve(async (req) => {
@@ -136,57 +98,70 @@ serve(async (req) => {
   }
 
   try {
-    // Extract user ID from JWT for rate limiting and audit
+    // Cryptographically verify the JWT via Supabase Auth instead of decoding the
+    // payload manually with atob(). This prevents impersonation if verify_jwt is
+    // ever disabled at the gateway and ensures the rate-limit identity cannot be
+    // spoofed by the caller.
     const authHeader = req.headers.get('authorization');
-    const userId = getUserIdFromJwt(authHeader);
-    
-    if (!userId) {
-      console.error('Code execution attempt without valid user ID');
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) {
       return new Response(
         JSON.stringify({ output: '', error: 'Authentication required' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
-    // Check rate limit
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !userData?.user) {
+      console.error('JWT verification failed');
+      return new Response(
+        JSON.stringify({ output: '', error: 'Invalid or expired authentication token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const userId = userData.user.id;
+
     const rateLimit = checkRateLimit(userId);
     if (!rateLimit.allowed) {
       console.warn(`Rate limit exceeded for user ${userId}`);
       return new Response(
-        JSON.stringify({ 
-          output: '', 
-          error: `Rate limit exceeded. You can execute ${MAX_EXECUTIONS_PER_HOUR} code snippets per hour. Try again in ${rateLimit.resetIn} seconds.` 
+        JSON.stringify({
+          output: '',
+          error: `Rate limit exceeded. You can execute ${MAX_EXECUTIONS_PER_HOUR} code snippets per hour. Try again in ${rateLimit.resetIn} seconds.`
         }),
-        { 
-          status: 429, 
-          headers: { 
-            ...corsHeaders, 
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
             'Content-Type': 'application/json',
             'X-RateLimit-Remaining': '0',
             'X-RateLimit-Reset': rateLimit.resetIn.toString()
-          } 
+          }
         }
       );
     }
 
     const { code, language } = await req.json();
-    
-    // Validate inputs
+
     if (typeof code !== 'string') {
       return new Response(
         JSON.stringify({ output: '', error: 'Invalid code: must be a string' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
     if (typeof language !== 'string') {
       return new Response(
         JSON.stringify({ output: '', error: 'Invalid language: must be a string' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
-    // Validate code content
+
     const validation = validateCode(code);
     if (!validation.valid) {
       console.warn(`Code validation failed for user ${userId}: ${validation.error}`);
@@ -195,42 +170,33 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
+
     console.log(`User ${userId} executing ${language} code (${new TextEncoder().encode(code).length} bytes)`);
 
     const langConfig = languageMap[language.toLowerCase()];
-    
     if (!langConfig) {
       return new Response(
-        JSON.stringify({ 
-          output: '', 
-          error: `Language '${language}' is not supported. Supported languages: ${Object.keys(languageMap).join(', ')}` 
+        JSON.stringify({
+          output: '',
+          error: `Language '${language}' is not supported. Supported languages: ${Object.keys(languageMap).join(', ')}`
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Call Piston API for code execution with strict timeouts
     const pistonResponse = await fetch('https://emkc.org/api/v2/piston/execute', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         language: langConfig.language,
         version: langConfig.version,
-        files: [
-          {
-            name: getFileName(langConfig.language),
-            content: code,
-          }
-        ],
+        files: [{ name: getFileName(langConfig.language), content: code }],
         stdin: '',
         args: [],
         compile_timeout: EXECUTION_TIMEOUT_COMPILE,
         run_timeout: EXECUTION_TIMEOUT_RUN,
-        compile_memory_limit: 128000000, // 128MB compile memory limit
-        run_memory_limit: 64000000,      // 64MB run memory limit
+        compile_memory_limit: 128000000,
+        run_memory_limit: 64000000,
       }),
     });
 
@@ -241,30 +207,20 @@ serve(async (req) => {
     }
 
     const result = await pistonResponse.json();
-    console.log(`Execution complete for user ${userId}:`, JSON.stringify({ 
-      language: langConfig.language,
-      compile_code: result.compile?.code,
-      run_code: result.run?.code 
-    }));
 
     let output = '';
     let error = '';
-
-    // Handle compile errors
     if (result.compile && result.compile.code !== 0) {
       error = result.compile.stderr || result.compile.output || 'Compilation failed';
     } else if (result.run) {
-      // Handle runtime output
       output = result.run.stdout || '';
       error = result.run.stderr || '';
-      
       if (result.run.code !== 0 && !error) {
         error = `Process exited with code ${result.run.code}`;
       }
     }
 
-    // Truncate output to prevent abuse
-    const MAX_OUTPUT_LENGTH = 50000; // 50KB max output
+    const MAX_OUTPUT_LENGTH = 50000;
     if (output.length > MAX_OUTPUT_LENGTH) {
       output = output.substring(0, MAX_OUTPUT_LENGTH) + '\n\n[Output truncated - exceeded 50KB limit]';
     }
@@ -274,26 +230,20 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ output: output.trim(), error: error.trim() }),
-      { 
-        headers: { 
-          ...corsHeaders, 
+      {
+        headers: {
+          ...corsHeaders,
           'Content-Type': 'application/json',
           'X-RateLimit-Remaining': rateLimit.remaining.toString(),
           'X-RateLimit-Reset': rateLimit.resetIn.toString()
-        } 
+        }
       }
     );
   } catch (err) {
     console.error('Error in run-code function:', err);
     return new Response(
-      JSON.stringify({ 
-        output: '', 
-        error: err instanceof Error ? err.message : 'Unknown error occurred' 
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ output: '', error: err instanceof Error ? err.message : 'Unknown error occurred' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
