@@ -977,6 +977,12 @@ const Dashboard = () => {
 
       {/* Command Palette */}
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} onSearch={setSearchQuery} />
+      <GlobalContentSearchDialog
+        open={contentSearchOpen}
+        onOpenChange={setContentSearchOpen}
+        files={files}
+        onOpenFile={handlePreview}
+      />
 
       {/* Terminal Panel */}
       <TerminalPanel
