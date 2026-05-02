@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { wildcardCorsHeaders as corsHeaders } from "../_shared/cors.ts";
+
+const MAX_CALLS_PER_HOUR = 60;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -7,6 +10,53 @@ serve(async (req) => {
   }
 
   try {
+    // Verify the JWT cryptographically via Supabase Auth
+    const authHeader = req.headers.get("authorization");
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+    const authClient = createClient(supabaseUrl, anonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data: userData, error: userErr } = await authClient.auth.getUser(token);
+    if (userErr || !userData?.user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired authentication token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const userId = userData.user.id;
+
+    // Per-user rate limiting backed by ai_call_log table
+    const adminClient = createClient(supabaseUrl, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const sinceIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: recentCount } = await adminClient
+      .from("ai_call_log")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("called_at", sinceIso);
+
+    if ((recentCount ?? 0) >= MAX_CALLS_PER_HOUR) {
+      return new Response(
+        JSON.stringify({
+          error: `Rate limit exceeded. You can make ${MAX_CALLS_PER_HOUR} AI requests per hour. Please try again later.`,
+        }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { query, currentPath } = await req.json();
 
     if (!query || typeof query !== "string" || query.length > 500) {
@@ -23,6 +73,18 @@ serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
       );
     }
+
+    // Record the call before invoking the gateway so concurrent floods can't bypass the limit
+    await adminClient.from("ai_call_log").insert({ user_id: userId });
+
+    // Best-effort cleanup of old log rows for this user
+    const cutoffIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    adminClient
+      .from("ai_call_log")
+      .delete()
+      .eq("user_id", userId)
+      .lt("called_at", cutoffIso)
+      .then(() => undefined, () => undefined);
 
     const systemPrompt = `You are a terminal command translator for a cloud storage app called CloudStore.
 Convert natural language queries into terminal commands.
@@ -78,14 +140,11 @@ RULES:
     const aiData = await response.json();
     const content = aiData.choices?.[0]?.message?.content?.trim() || "";
 
-    // Try to parse JSON from AI response
     let result;
     try {
-      // Handle markdown code blocks
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
       result = JSON.parse(jsonMatch[1]?.trim() || content);
     } catch {
-      // If not valid JSON, try to extract a command
       if (content.startsWith("{")) {
         result = { response: "Could not parse AI response" };
       } else {
@@ -98,8 +157,9 @@ RULES:
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    console.error("terminal-ai error:", error);
     return new Response(
-      JSON.stringify({ error: error.message || "Internal error" }),
+      JSON.stringify({ error: "Internal error" }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
   }

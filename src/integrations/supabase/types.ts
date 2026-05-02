@@ -55,6 +55,24 @@ export type Database = {
           },
         ]
       }
+      ai_call_log: {
+        Row: {
+          called_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          called_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          called_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       file_versions: {
         Row: {
           created_at: string
@@ -251,6 +269,30 @@ export type Database = {
         }
         Relationships: []
       }
+      share_attempts: {
+        Row: {
+          attempted_at: string
+          id: string
+          ip_address: string | null
+          succeeded: boolean
+          token_hash: string
+        }
+        Insert: {
+          attempted_at?: string
+          id?: string
+          ip_address?: string | null
+          succeeded?: boolean
+          token_hash: string
+        }
+        Update: {
+          attempted_at?: string
+          id?: string
+          ip_address?: string | null
+          succeeded?: boolean
+          token_hash?: string
+        }
+        Relationships: []
+      }
       shares: {
         Row: {
           created_at: string
@@ -339,6 +381,41 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shares_safe: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          file_id: string | null
+          id: string | null
+          password_protected: boolean | null
+          token: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          file_id?: string | null
+          id?: string | null
+          password_protected?: never
+          token?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          file_id?: string | null
+          id?: string | null
+          password_protected?: never
+          token?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shares_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
             referencedColumns: ["id"]
           },
         ]

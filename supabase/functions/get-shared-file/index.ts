@@ -65,6 +65,39 @@ Deno.serve(async (req) => {
 
     // Check password if required
     if (share.password_hash) {
+      // Brute-force protection: count failed attempts in the last 15 minutes
+      const tokenHashBuf = await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(token)
+      );
+      const tokenHash = Array.from(new Uint8Array(tokenHashBuf))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
+      const windowStart = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const { count: recentFailures } = await supabaseAdmin
+        .from('share_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('token_hash', tokenHash)
+        .eq('succeeded', false)
+        .gte('attempted_at', windowStart);
+
+      const MAX_FAILED_ATTEMPTS = 10;
+      if ((recentFailures ?? 0) >= MAX_FAILED_ATTEMPTS) {
+        logSecurityEvent('share_password_locked', { ip, tokenHash });
+        return new Response(
+          JSON.stringify({ error: 'Too many failed attempts. Please try again later.' }),
+          {
+            status: 429,
+            headers: {
+              ...wildcardCorsHeaders,
+              'Content-Type': 'application/json',
+              'Retry-After': '900',
+            },
+          }
+        );
+      }
+
       if (!password || typeof password !== 'string') {
         return new Response(
           JSON.stringify({ error: 'Password required', passwordRequired: true }),
@@ -72,21 +105,24 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Verify password - support both bcrypt and legacy SHA-256
       let isValidPassword = false;
-      
       if (isLegacySha256Hash(share.password_hash)) {
-        // Legacy SHA-256 verification for backwards compatibility
         isValidPassword = await verifyLegacySha256(password, share.password_hash);
       } else {
-        // Modern bcrypt verification
         isValidPassword = await verifyPassword(password, share.password_hash);
       }
 
+      // Record the attempt (success or failure) for rate-limiting/audit
+      await supabaseAdmin.from('share_attempts').insert({
+        token_hash: tokenHash,
+        ip_address: ip,
+        succeeded: isValidPassword,
+      });
+
       if (!isValidPassword) {
-        logSecurityEvent('share_password_failed', {
-          ip: req.headers.get('x-forwarded-for')
-        });
+        // Small artificial delay to slow automated guessing
+        await new Promise((r) => setTimeout(r, 250));
+        logSecurityEvent('share_password_failed', { ip });
         return new Response(
           JSON.stringify({ error: 'Incorrect password', passwordRequired: true }),
           { status: 401, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }

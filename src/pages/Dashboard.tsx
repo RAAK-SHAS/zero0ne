@@ -285,7 +285,7 @@ const Dashboard = () => {
       const { data, error } = await supabase
         .from('shares')
         .insert({ file_id: fileId })
-        .select()
+        .select('id, file_id, token, expires_at, created_at')
         .single();
 
       if (error) throw error;
