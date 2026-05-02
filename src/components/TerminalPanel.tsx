@@ -161,6 +161,28 @@ export const TerminalPanel = ({
     }
   }, [isOpen]);
 
+  // Refocus input after a command finishes processing
+  // (the input is disabled during processing which causes the browser to blur it)
+  const wasProcessing = useRef(false);
+  useEffect(() => {
+    if (wasProcessing.current && !isProcessing && isOpen) {
+      // Wait a tick so the disabled attribute is cleared in the DOM
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+    wasProcessing.current = isProcessing;
+  }, [isProcessing, isOpen]);
+
+  // Also refocus when new output lines arrive (covers fast commands)
+  useEffect(() => {
+    if (isOpen && document.activeElement !== inputRef.current) {
+      const active = document.activeElement;
+      // Don't steal focus from other interactive elements (buttons, dialogs, etc.)
+      if (!active || active === document.body) {
+        inputRef.current?.focus();
+      }
+    }
+  }, [lines, isOpen]);
+
   // Tab autocomplete
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Tab') {
@@ -399,11 +421,19 @@ export const TerminalPanel = ({
                 </div>
               </div>
 
-              {/* Output */}
-              <div ref={scrollRef} className={cn(
-                'flex-1 overflow-y-auto px-4 py-2 font-mono text-xs leading-relaxed relative z-20',
-                t.text
-              )}>
+              {/* Output - clicking focuses the input */}
+              <div
+                ref={scrollRef}
+                onClick={(e) => {
+                  // Only refocus if user didn't select text
+                  if (window.getSelection()?.toString()) return;
+                  inputRef.current?.focus();
+                }}
+                className={cn(
+                  'flex-1 overflow-y-auto px-4 py-2 font-mono text-xs leading-relaxed relative z-20 cursor-text',
+                  t.text
+                )}
+              >
                 {lines.map(line => (
                   <div key={line.id} className={cn('whitespace-pre-wrap break-all', getLineColor(line.type))}>
                     {line.content}
@@ -460,7 +490,7 @@ export const TerminalPanel = ({
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={isProcessing ? 'Processing...' : 'Type a command... (use | to pipe)'}
-                  disabled={isProcessing}
+                  readOnly={isProcessing}
                   className={cn(
                     'flex-1 bg-transparent border-none outline-none font-mono text-xs placeholder:opacity-40',
                     t.inputText
