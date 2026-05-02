@@ -65,7 +65,7 @@ export async function decryptBlob(blob: Blob, passphrase: string): Promise<Blob>
   const ciphertext = buf.slice(MAGIC.length + 16 + 12);
   const key = await deriveKey(passphrase, salt);
   try {
-    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv as BufferSource }, key, ciphertext as BufferSource);
     return new Blob([plaintext]);
   } catch {
     throw new Error("Wrong passphrase or corrupted file.");
