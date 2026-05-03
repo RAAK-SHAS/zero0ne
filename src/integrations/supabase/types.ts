@@ -269,6 +269,24 @@ export type Database = {
         }
         Relationships: []
       }
+      run_code_log: {
+        Row: {
+          executed_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          executed_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          executed_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       share_attempts: {
         Row: {
           attempted_at: string
