@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { useEditorSave } from '@/hooks/useEditorSave';
 
 interface MarkdownEditorProps {
