@@ -56,23 +56,36 @@ const languageMap: Record<string, { language: string; version: string }> = {
   'sh': { language: 'bash', version: '5.2.0' },
 };
 
-const rateLimitCache = new Map<string, { count: number; resetTime: number }>();
+async function checkRateLimit(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string
+): Promise<{ allowed: boolean; remaining: number; resetIn: number }> {
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count, error } = await serviceClient
+    .from('run_code_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('executed_at', oneHourAgo);
 
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
-  const now = Date.now();
-  const hourInMs = 60 * 60 * 1000;
-  let userLimit = rateLimitCache.get(userId);
-  if (!userLimit || now >= userLimit.resetTime) {
-    userLimit = { count: 0, resetTime: now + hourInMs };
-    rateLimitCache.set(userId, userLimit);
+  if (error) {
+    console.error('rate-limit count error', error);
+    // Fail closed to be safe.
+    return { allowed: false, remaining: 0, resetIn: 3600 };
   }
-  const remaining = MAX_EXECUTIONS_PER_HOUR - userLimit.count;
-  const resetIn = Math.ceil((userLimit.resetTime - now) / 1000);
-  if (userLimit.count >= MAX_EXECUTIONS_PER_HOUR) {
-    return { allowed: false, remaining: 0, resetIn };
+
+  const used = count ?? 0;
+  if (used >= MAX_EXECUTIONS_PER_HOUR) {
+    return { allowed: false, remaining: 0, resetIn: 3600 };
   }
-  userLimit.count++;
-  return { allowed: true, remaining: remaining - 1, resetIn };
+
+  const { error: insErr } = await serviceClient
+    .from('run_code_log')
+    .insert({ user_id: userId });
+  if (insErr) {
+    console.error('rate-limit insert error', insErr);
+  }
+
+  return { allowed: true, remaining: MAX_EXECUTIONS_PER_HOUR - used - 1, resetIn: 3600 };
 }
 
 function validateCode(code: string): { valid: boolean; error?: string } {
@@ -127,7 +140,12 @@ serve(async (req) => {
     }
     const userId = userData.user.id;
 
-    const rateLimit = checkRateLimit(userId);
+    const serviceClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+    const rateLimit = await checkRateLimit(serviceClient, userId);
     if (!rateLimit.allowed) {
       console.warn(`Rate limit exceeded for user ${userId}`);
       return new Response(

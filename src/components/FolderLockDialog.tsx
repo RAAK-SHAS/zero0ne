@@ -142,7 +142,14 @@ export const FolderLockDialog = ({
           <DialogDescription>{descriptions[action]}</DialogDescription>
         </DialogHeader>
 
+        {(action === 'lock' || action === 'change_password') && (
+          <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-300">
+            ⚠️ Folder lock is a UI-only convenience to hide contents from casual viewing. It is <strong>not</strong> cryptographic protection — files inside remain accessible to anyone with your account credentials. For true confidentiality, use the per-file Encryption feature.
+          </div>
+        )}
+
         <div className="space-y-4 py-2">
+
           {(action === 'lock') && (
             <>
               <div className="space-y-2">
