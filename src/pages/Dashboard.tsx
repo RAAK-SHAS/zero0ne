@@ -1024,6 +1024,26 @@ const Dashboard = () => {
       {/* Upload Summary */}
       <UploadSummary onOpenQueue={() => setShowUploadQueue(true)} />
 
+      <UploadQueuePanel
+        isOpen={showUploadQueue}
+        onClose={() => setShowUploadQueue(false)}
+        onReselectFile={handleReselectFile}
+      />
+
+      <ResumeUploadDialog
+        open={!!resumeUploadId}
+        onOpenChange={(open) => {
+          if (!open) setResumeUploadId(null);
+        }}
+        uploadId={resumeUploadId || ''}
+        fileName={resumeFileName}
+        onFileSelected={handleFileReselected}
+        onCancel={() => {
+          if (resumeUploadId) cancelUpload(resumeUploadId);
+          setResumeUploadId(null);
+        }}
+      />
+
       <BatchActions
         selectedCount={selectedFiles.length}
         folders={folders}
