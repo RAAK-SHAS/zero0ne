@@ -296,7 +296,73 @@ export function getExtendedCommandHandler(command: string): ((ctx: CommandContex
 
     // === File copy / delete (extending existing) ===
     cp: async (ctx) => {
-      ctx.collectLine('info', `cp: File copying is not yet supported. Use download + re-upload.`);
+      if (ctx.args.length < 1) {
+        ctx.collectLine('error', 'cp: missing operand. Usage: cp <source> [destination]');
+        return [];
+      }
+      if (!ctx.userId) {
+        ctx.collectLine('error', 'cp: not authenticated');
+        return [];
+      }
+      const srcName = ctx.args[0];
+      const dstArg = ctx.args[1];
+      const src = ctx.resolveFileName(srcName);
+      if (!src) {
+        ctx.collectLine('error', `cp: cannot stat '${srcName}': No such file`);
+        return [];
+      }
+
+      // Determine destination: folder name -> copy with same name into that folder
+      // Otherwise treat as new filename in current folder
+      let targetFolderId: string | null = ctx.termState.currentFolderId;
+      let newName = src.name;
+      if (dstArg) {
+        const folder = ctx.resolveFolderName(dstArg);
+        if (folder) {
+          targetFolderId = folder.id;
+        } else {
+          newName = dstArg;
+        }
+      } else {
+        // Default: copy in current folder with "_copy" suffix
+        const dot = src.name.lastIndexOf('.');
+        newName = dot > 0
+          ? `${src.name.slice(0, dot)}_copy${src.name.slice(dot)}`
+          : `${src.name}_copy`;
+      }
+
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const newStoragePath = `${ctx.userId}/${crypto.randomUUID()}_${newName}`;
+        const { error: copyErr } = await supabase.storage
+          .from('user-files')
+          .copy(src.storage_path, newStoragePath);
+        if (copyErr) {
+          ctx.collectLine('error', `cp: storage copy failed: ${copyErr.message}`);
+          return [];
+        }
+        const { error: dbErr } = await supabase.from('files').insert({
+          user_id: ctx.userId,
+          name: newName,
+          size_bytes: src.size_bytes,
+          mime_type: src.mime_type || 'application/octet-stream',
+          storage_path: newStoragePath,
+          folder_id: targetFolderId,
+          is_encrypted: src.is_encrypted || false,
+          encryption_algorithm: src.encryption_algorithm || null,
+          encryption_metadata: src.encryption_metadata || null,
+          tags: src.tags || null,
+        });
+        if (dbErr) {
+          await supabase.storage.from('user-files').remove([newStoragePath]);
+          ctx.collectLine('error', `cp: database insert failed: ${dbErr.message}`);
+          return [];
+        }
+        ctx.collectLine('success', `Copied '${src.name}' → '${newName}'`);
+        ctx.callbacks.refreshData?.();
+      } catch (e: any) {
+        ctx.collectLine('error', `cp: ${e?.message || 'unknown error'}`);
+      }
       return [];
     },
 
