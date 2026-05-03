@@ -41,6 +41,7 @@ export interface UploadItem {
   fileSize: number;
   fileType: string;
   storagePath: string;
+  folderId?: string;
   uploadedChunks: number[];
   totalChunks: number;
   status: 'pending' | 'queued' | 'uploading' | 'paused' | 'completed' | 'error';
@@ -128,6 +129,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const offlinePausedUploads = useRef<Set<string>>(new Set());
   const speedTracking = useRef<Record<string, { bytes: number; timestamp: number }[]>>({});
   const fileRefs = useRef<Record<string, File>>({});
+  const authRetryAttempts = useRef<Record<string, number>>({});
   const uploadQueue = useRef<string[]>([]);
   const currentUserId = useRef<string>('');
   const activeSlots = useRef<Set<string>>(new Set());
@@ -396,7 +398,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         endpoint: `https://${projectId}.supabase.co/storage/v1/upload/resumable`,
         retryDelays: [0, 1000, 3000, 5000, 10000, 20000, 30000, 60000, 120000, 300000],
         headers: {
-          authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           apikey: anonKey,
         },
         uploadDataDuringCreation: true,
@@ -410,7 +412,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onShouldRetry: (err) => {
           const status = (err as any)?.originalResponse?.getStatus?.();
-          if (status === 403 || status === 401) return true;
+          if (status === 403 || status === 401) return false;
           if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
           return true;
         },
@@ -422,6 +424,12 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           console.error('TUS upload error:', error);
           incrementRetryCount();
           activeSlots.current.delete(uploadId);
+          const errorMessage = error.message?.toLowerCase?.() || '';
+          const isAuthError =
+            errorMessage.includes('401') ||
+            errorMessage.includes('403') ||
+            errorMessage.includes('unauthorized') ||
+            errorMessage.includes('invalid compact jws');
 
           if (!navigator.onLine) {
             setNetworkState(prev => ({ ...prev, isOnline: false, connectionQuality: 'offline' }));
@@ -436,10 +444,11 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             return;
           }
 
-          if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
+          if (isAuthError && (authRetryAttempts.current[uploadId] || 0) < 1) {
+            authRetryAttempts.current[uploadId] = (authRetryAttempts.current[uploadId] || 0) + 1;
             const newToken = await refreshAuthToken();
             if (newToken && tusUploads.current[uploadId]) {
-              tusUpload.options.headers = { ...tusUpload.options.headers, authorization: `Bearer ${newToken}` };
+              tusUpload.options.headers = { ...tusUpload.options.headers, Authorization: `Bearer ${newToken}` };
               activeSlots.current.add(uploadId);
               tusUpload.start();
               return;
@@ -503,6 +512,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
               size_bytes: file.size,
               mime_type: state.fileType || 'application/octet-stream',
               storage_path: state.storagePath,
+              folder_id: state.folderId ?? null,
             };
             const { error: dbError } = await supabase.from('files').insert(insertData);
             if (dbError) console.error('DB insert error:', dbError);
@@ -515,6 +525,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
           delete tusUploads.current[uploadId];
           delete speedTracking.current[uploadId];
+          delete authRetryAttempts.current[uploadId];
           activeSlots.current.delete(uploadId);
           fillSlots();
         },
@@ -527,7 +538,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           const newToken = await refreshAuthToken();
           if (newToken) {
             Object.values(tusUploads.current).forEach(u => {
-              if (u.options.headers) u.options.headers.authorization = `Bearer ${newToken}`;
+              if (u.options.headers) u.options.headers.Authorization = `Bearer ${newToken}`;
             });
           }
         }, 25 * 60 * 1000);
@@ -582,6 +593,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         createdAt: Date.now(),
         priority: Object.keys(uploads).length + index,
         folderPath,
+        folderId,
         file,
         autoRetryCount: 0,
       };
@@ -644,6 +656,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     uploadQueue.current = uploadQueue.current.filter(qId => qId !== id);
     await deleteUploadState(id);
     delete fileRefs.current[id];
+    delete authRetryAttempts.current[id];
     activeSlots.current.delete(id);
 
     setUploads(prev => {
