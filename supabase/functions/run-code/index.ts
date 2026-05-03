@@ -140,7 +140,12 @@ serve(async (req) => {
     }
     const userId = userData.user.id;
 
-    const rateLimit = checkRateLimit(userId);
+    const serviceClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+    const rateLimit = await checkRateLimit(serviceClient, userId);
     if (!rateLimit.allowed) {
       console.warn(`Rate limit exceeded for user ${userId}`);
       return new Response(
