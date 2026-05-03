@@ -81,7 +81,7 @@ export const UploadSummary = memo(({ onOpenQueue }: UploadSummaryProps) => {
   const allDone = totalInProgress === 0 && (completedUploads.length > 0 || failedUploads.length > 0);
 
   return (
-    <Card className="fixed bottom-4 left-4 w-80 shadow-xl z-40 overflow-hidden">
+    <Card className="fixed bottom-4 left-4 z-40 flex max-h-[80vh] w-80 flex-col overflow-hidden shadow-xl">
       <CardContent className="p-3 space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -165,30 +165,27 @@ export const UploadSummary = memo(({ onOpenQueue }: UploadSummaryProps) => {
                     {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-1 mt-1">
-                  {failedUploads.slice(0, 5).map(upload => (
-                    <div key={upload.id} className="flex items-center justify-between p-2 bg-destructive/5 rounded text-xs">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{upload.fileName}</p>
-                        <p className="text-destructive/70 truncate">{upload.error || 'Upload failed'}</p>
+                <CollapsibleContent className="mt-1 space-y-1">
+                  <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                    {failedUploads.map(upload => (
+                      <div key={upload.id} className="flex items-center justify-between rounded bg-destructive/5 p-2 text-xs">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{upload.fileName}</p>
+                          <p className="truncate text-destructive/70">{upload.error || 'Upload failed'}</p>
+                        </div>
+                        {upload.file && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="ml-2 h-6 w-6"
+                            onClick={() => retryUpload(upload.id)}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
-                      {upload.file && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 ml-2"
-                          onClick={() => retryUpload(upload.id)}
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                  {failedUploads.length > 5 && (
-                    <p className="text-xs text-muted-foreground text-center py-1">
-                      +{failedUploads.length - 5} more
-                    </p>
-                  )}
+                    ))}
+                  </div>
                   
                   {/* Retry all button */}
                   {failedUploads.some(u => u.file) && (
