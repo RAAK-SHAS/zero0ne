@@ -38,8 +38,10 @@ export const MarkdownEditor = ({ file, fileUrl, open, onClose, onSaved }: Markdo
   }, [open, fileUrl]);
 
   const renderedHtml = useMemo(() => {
-    try { return marked.parse(content, { async: false }) as string; }
-    catch { return content; }
+    try {
+      const raw = marked.parse(content, { async: false }) as string;
+      return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
+    } catch { return ''; }
   }, [content]);
 
   const insertAtCursor = (before: string, after = '') => {
