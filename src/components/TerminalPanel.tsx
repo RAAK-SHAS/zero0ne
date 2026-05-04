@@ -328,10 +328,10 @@ export const TerminalPanel = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             onClick={onToggle}
-            className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-primary/30 shadow-lg shadow-primary/10 hover:border-primary/60 transition-all duration-200 group"
+            className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-border/80 bg-card/95 px-3 py-2 shadow-lg transition-all duration-200 group hover:border-primary/40"
           >
             <Terminal className="h-4 w-4 text-primary" />
-            <span className="text-xs font-mono text-muted-foreground group-hover:text-foreground">Terminal</span>
+            <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground">Advanced Terminal</span>
             <kbd className="text-[9px] font-mono text-muted-foreground/60 bg-muted/50 px-1 rounded">Ctrl+`</kbd>
           </motion.button>
         )}
@@ -377,8 +377,8 @@ export const TerminalPanel = ({
               )}>
                 <div className="flex items-center gap-2">
                   <Terminal className={cn('h-4 w-4', t.prompt)} />
-                  <span className={cn('text-xs font-mono font-semibold', t.text)}>CloudStore Terminal</span>
-                  <span className={cn('text-[10px] font-mono', t.info)}>v2.0</span>
+                  <span className={cn('text-xs font-semibold', t.text)}>Advanced Terminal</span>
+                  <span className={cn('text-[10px] font-mono', t.info)}>Power mode</span>
                   {isProcessing && (
                     <span className={cn('text-[10px] font-mono animate-pulse', t.prompt)}>processing...</span>
                   )}
@@ -489,7 +489,7 @@ export const TerminalPanel = ({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={isProcessing ? 'Processing...' : 'Type a command... (use | to pipe)'}
+                   placeholder={isProcessing ? 'Processing...' : 'Type a command… try ls, help, cp, mkdir'}
                   readOnly={isProcessing}
                   className={cn(
                     'flex-1 bg-transparent border-none outline-none font-mono text-xs placeholder:opacity-40',
