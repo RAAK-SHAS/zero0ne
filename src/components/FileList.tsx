@@ -86,9 +86,9 @@ const FileRow = memo(({
   return (
     <div
       className={cn(
-        "group flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200",
-        "hover:bg-accent/30 hover:neon-border",
-        isSelected && "bg-primary/5 neon-border"
+        "group flex items-center justify-between rounded-lg border px-4 py-3 transition-all duration-200",
+        "border-transparent bg-card/40 hover:border-border/80 hover:bg-card",
+        isSelected && "border-primary/35 bg-primary/5 shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]"
       )}
       draggable
       onDragStart={handleDragStart}
@@ -106,8 +106,8 @@ const FileRow = memo(({
           </button>
         )}
 
-        <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer group/preview" onClick={handlePreviewClick}>
-          <div className="h-10 w-10 rounded-lg bg-accent/30 neon-border flex items-center justify-center shrink-0 group-hover/preview:bg-primary/10 transition-colors">
+          <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer group/preview" onClick={handlePreviewClick}>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-accent/30 transition-colors group-hover/preview:bg-primary/10">
             <FileIcon fileName={file.name} mimeType={file.mime_type} storagePath={file.storage_path} showThumbnail className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -116,16 +116,18 @@ const FileRow = memo(({
               {file.is_encrypted && <div className="px-1.5 py-0.5 rounded-md bg-primary/10 shrink-0"><Lock className="h-3 w-3 text-primary" /></div>}
               {isArchiveFile(file.name) && <div className="px-1.5 py-0.5 rounded-md bg-accent shrink-0"><Archive className="h-3 w-3 text-primary" /></div>}
               {autoTag && (
-                <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[9px] font-mono text-primary shrink-0">
+                  <span className="hidden shrink-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary sm:inline-flex">
                   <span className="h-1 w-1 rounded-full bg-primary" />
                   {autoTag}
                 </span>
               )}
             </div>
-            <div className="flex gap-2 text-xs text-muted-foreground mt-0.5">
+              <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span className="tabular-nums">{formatBytes(file.size_bytes)}</span>
               <span className="text-border">·</span>
               <span>{format(new Date(file.created_at), 'MMM d, yyyy')}</span>
+                <span className="text-border">·</span>
+                <span>Click to preview</span>
             </div>
           </div>
         </div>
@@ -165,12 +167,12 @@ export const FileList = memo(({
 }: FileListProps) => {
   if (files.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="h-16 w-16 rounded-2xl bg-accent/30 neon-border flex items-center justify-center mb-4">
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/80 bg-card/40 py-20 text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/70 bg-accent/30">
           <FolderOpenIcon className="h-8 w-8 text-muted-foreground/50" />
         </div>
-        <p className="text-muted-foreground font-medium">No files yet</p>
-        <p className="text-xs text-muted-foreground/60 mt-1">Upload your first file to get started</p>
+        <p className="font-medium text-foreground">No files yet</p>
+        <p className="mt-1 text-xs text-muted-foreground/80">Upload your first file to get started</p>
       </div>
     );
   }
@@ -178,8 +180,8 @@ export const FileList = memo(({
   const allSelected = files.length > 0 && selectedFiles.length === files.length;
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-3 px-4 py-2 text-xs text-muted-foreground">
+    <div className="space-y-2">
+      <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/40 px-4 py-2 text-xs text-muted-foreground">
         <Checkbox checked={allSelected} onCheckedChange={onSelectAll} />
         <span className="font-medium">{selectedFiles.length > 0 ? `${selectedFiles.length} selected` : 'Select all'}</span>
         <span className="ml-auto tabular-nums">{files.length} file{files.length !== 1 ? 's' : ''}</span>
