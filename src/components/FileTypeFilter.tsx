@@ -14,12 +14,11 @@ import {
   Music, 
   Archive, 
   File,
-  Files
+  Files,
+  FileCode2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-
-export type FileTypeCategory = 'all' | 'images' | 'videos' | 'documents' | 'audio' | 'archives' | 'other';
 
 interface FileTypeFilterProps {
   value: FileTypeCategory;
@@ -27,13 +26,16 @@ interface FileTypeFilterProps {
   fileCounts?: Record<FileTypeCategory, number>;
 }
 
+export type FileTypeCategory = 'all' | 'images' | 'videos' | 'documents' | 'audio' | 'archives' | 'code' | 'other';
+
 const FILE_TYPE_CONFIG: Record<FileTypeCategory, { label: string; icon: React.ElementType; extensions: string[] }> = {
   all: { label: 'All Files', icon: Files, extensions: [] },
   images: { label: 'Images', icon: Image, extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'heic', 'heif'] },
   videos: { label: 'Videos', icon: Video, extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'm4v', '3gp', 'ogv'] },
-  documents: { label: 'Documents', icon: FileText, extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'odp', 'csv', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'ipynb'] },
+  documents: { label: 'Documents', icon: FileText, extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'odp'] },
   audio: { label: 'Audio', icon: Music, extensions: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'ape', 'opus'] },
   archives: { label: 'Archives', icon: Archive, extensions: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz', 'tar.gz'] },
+  code: { label: 'Code', icon: FileCode2, extensions: ['csv', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'go', 'rs', 'sql', 'yaml', 'yml', 'ipynb'] },
   other: { label: 'Other', icon: File, extensions: [] },
 };
 

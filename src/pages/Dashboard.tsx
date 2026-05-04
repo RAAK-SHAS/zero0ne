@@ -616,6 +616,7 @@ const Dashboard = () => {
       documents: 0,
       audio: 0,
       archives: 0,
+      code: 0,
       other: 0,
     };
     
@@ -702,6 +703,16 @@ const Dashboard = () => {
 
   const currentFolders = getChildFolders(currentFolderId);
   const currentPath = getCurrentPath();
+  const recentCount = useMemo(() => {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    return files.filter(f => new Date(f.created_at) >= sevenDaysAgo).length;
+  }, [files]);
+  const quickTypeCounts = useMemo(() => ({
+    images: files.filter(f => getFileTypeCategory(f.name, f.mime_type) === 'images').length,
+    documents: files.filter(f => getFileTypeCategory(f.name, f.mime_type) === 'documents').length,
+    code: files.filter(f => /\.(js|ts|jsx|tsx|py|java|cpp|c|go|rs|md|json|yml|yaml|html|css|sql|ipynb)$/i.test(f.name)).length,
+  }), [files]);
 
   const viewTitle = currentView === 'recent' ? 'Recent Files' : currentView === 'shared' ? 'Shared Files' : filterFavorites ? 'Favorites' : 'My Files';
 
@@ -717,18 +728,28 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="flex h-screen bg-background relative">
-      {/* Grid background */}
-      <div className="fixed inset-0 pointer-events-none" style={{
-        backgroundImage: `linear-gradient(hsl(168 100% 50% / 0.02) 1px, transparent 1px), linear-gradient(90deg, hsl(168 100% 50% / 0.02) 1px, transparent 1px)`,
-        backgroundSize: '60px 60px',
+    <div className="relative flex h-screen bg-background">
+      <div className="pointer-events-none fixed inset-0" style={{
+        backgroundImage: `linear-gradient(hsl(var(--primary) / 0.04) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary) / 0.04) 1px, transparent 1px)`,
+        backgroundSize: '72px 72px',
+        maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.05))',
       }} />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.08),_transparent_42%)] opacity-70" />
       {/* Sidebar - desktop */}
       <AppSidebar
         storageUsed={profile?.storage_used_bytes || 0}
         storageTotal={profile?.storage_quota_bytes || 109951162777600}
         onUploadClick={() => navigate('/upload')}
         onNewFolderClick={() => setShowCreateFolder(true)}
+        recentCount={recentCount}
+        sharedCount={0}
+        typeCounts={quickTypeCounts}
+        onQuickFilterClick={(filter) => {
+          setCurrentFolderId(null);
+          setFilterFavorites(false);
+          setFilterType(filter === 'code' ? 'code' : filter);
+          setSearchQuery('');
+        }}
       />
 
       {/* Main content */}
@@ -739,10 +760,11 @@ const Dashboard = () => {
         <input {...getInputProps()} />
         
         {isDragActive && (
-          <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-50 flex items-center justify-center">
-            <div className="bg-card p-8 rounded-lg border-2 border-dashed border-primary">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/45 backdrop-blur-sm">
+            <div className="rounded-xl border-2 border-dashed border-primary bg-card px-10 py-12 text-center shadow-2xl">
               <Upload className="h-16 w-16 mx-auto mb-4 text-primary" />
-              <p className="text-xl font-medium">Drop files here to upload</p>
+              <p className="text-xl font-semibold">Drop files to upload</p>
+              <p className="mt-2 text-sm text-muted-foreground">They’ll be added to the queue immediately.</p>
             </div>
           </div>
         )}
@@ -763,16 +785,26 @@ const Dashboard = () => {
         </header>
 
         {/* Desktop header bar */}
-        <header className="hidden md:flex border-b border-border glass sticky top-0 z-40">
+        <header className="hidden md:flex sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-xl">
           <div className="flex-1 px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold">{viewTitle}</h2>
+              <div>
+                <h1 className="text-xl font-semibold">{viewTitle}</h1>
+                <p className="text-sm text-muted-foreground">
+                  {filteredAndSortedFiles.length} item{filteredAndSortedFiles.length !== 1 ? 's' : ''}
+                  {currentFolders.length > 0 ? ` · ${currentFolders.length} folder${currentFolders.length !== 1 ? 's' : ''}` : ''}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setCmdOpen(true)} className="neon-border text-xs font-mono gap-2">
+              <Button variant="outline" size="sm" onClick={() => setCmdOpen(true)} className="border-border/70 bg-card/50 text-xs gap-2 hover:bg-accent/50">
                 <Search className="h-3 w-3" />
                 <span className="hidden lg:inline">Search</span>
                 <kbd className="hidden lg:inline h-4 px-1 rounded bg-muted border border-border text-[9px]">⌘K</kbd>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setTerminalOpen(true)} className="border-border/70 bg-card/50 text-xs gap-2 hover:bg-accent/50">
+                <Terminal className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Advanced Terminal</span>
               </Button>
               <GlobalUploadIndicator />
               <Sheet>
@@ -798,33 +830,35 @@ const Dashboard = () => {
         </header>
 
         <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
-          <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
+          <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 space-y-6">
             {/* Storage bar - mobile only */}
-            <div className="md:hidden neon-border rounded-lg p-4 bg-card/50 glass">
+            <div className="rounded-lg border border-border/70 bg-card/65 p-4 md:hidden">
               <StorageBar used={profile?.storage_used_bytes || 0} total={profile?.storage_quota_bytes || 109951162777600} />
             </div>
 
             {currentView === 'files' && (currentFolderId || folders.length > 0) && (
-              <div className="neon-border rounded-xl px-4 py-2.5 bg-card/30 glass backdrop-blur-md">
+              <div className="rounded-lg border border-border/70 bg-card/70 px-4 py-2.5 shadow-sm">
                 <FolderBreadcrumb path={currentPath} onNavigate={setCurrentFolderId} />
               </div>
             )}
 
             {/* Toolbar */}
-            <div className="space-y-3">
+            <div className="space-y-4">
               <h2 className="text-2xl font-bold md:hidden">
                 {viewTitle}
                 {filterTag && <span className="text-primary ml-2">#{filterTag}</span>}
               </h2>
               
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="rounded-xl border border-border/70 bg-card/75 p-3 shadow-sm">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
                 <SearchFilter value={searchQuery} onChange={setSearchQuery} />
                 
                 {/* Quick action buttons */}
-                <div className="flex items-center gap-1 bg-background/30 border border-border/30 rounded-lg p-0.5">
+                <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/40 p-0.5">
                   <button
                     onClick={() => setFilterFavorites(!filterFavorites)}
-                    className={`flex items-center justify-center h-7 w-7 rounded-md transition-all duration-200 ${
+                    className={`flex items-center justify-center h-8 w-8 rounded-md transition-all duration-200 ${
                       filterFavorites 
                         ? 'bg-primary/10 text-primary shadow-sm shadow-primary/10' 
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -837,7 +871,7 @@ const Dashboard = () => {
                   {currentView === 'files' && (
                     <button
                       onClick={() => setShowHidden(!showHidden)}
-                      className={`flex items-center justify-center h-7 w-7 rounded-md transition-all duration-200 ${
+                      className={`flex items-center justify-center h-8 w-8 rounded-md transition-all duration-200 ${
                         showHidden
                           ? 'bg-primary/10 text-primary shadow-sm shadow-primary/10'
                           : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -848,18 +882,19 @@ const Dashboard = () => {
                     </button>
                   )}
                 </div>
+                  <div className="hidden h-8 w-px bg-border/70 lg:block" />
 
                 {/* Tag filter */}
                 {allTags.length > 0 && (
                   <Select 
-                    value={filterTag || ''} 
-                    onValueChange={(v) => setFilterTag(v || null)}
+                    value={filterTag || '__all_tags'} 
+                    onValueChange={(v) => setFilterTag(v === '__all_tags' ? null : v)}
                   >
-                    <SelectTrigger className="w-[120px] h-9 text-xs font-mono bg-background/50 border-border/50">
+                    <SelectTrigger className="h-9 w-[140px] bg-background/50 text-xs border-border/70">
                       <SelectValue placeholder="Tags" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All tags</SelectItem>
+                      <SelectItem value="__all_tags">All tags</SelectItem>
                       {allTags.map(tag => (
                         <SelectItem key={tag} value={tag}>{tag}</SelectItem>
                       ))}
@@ -874,8 +909,12 @@ const Dashboard = () => {
                 />
                 
                 <SortControl value={sortConfig} onChange={setSortConfig} />
+                  </div>
 
-                <div className="ml-auto flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-3 xl:justify-end">
+                    <div className="text-xs text-muted-foreground">
+                      Live results update as you type
+                    </div>
                   <ViewToggle view={viewMode} onChange={setViewMode} />
                   
                   {/* Mobile-only action buttons */}
@@ -888,6 +927,7 @@ const Dashboard = () => {
                     </Button>
                   </div>
                 </div>
+                </div>
               </div>
             </div>
 
@@ -898,7 +938,7 @@ const Dashboard = () => {
                 animate={{ opacity: 1, x: 0, scale: 1 }}
                 exit={{ opacity: 0, x: -40, scale: 0.98 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 30, mass: 0.8 }}
-                className="neon-border rounded-lg p-4 md:p-6 bg-card/30 glass"
+                className="rounded-xl border border-border/70 bg-card/85 p-4 shadow-lg md:p-6"
               >
                 {/* Folders - only in files view */}
                 {currentView === 'files' && (

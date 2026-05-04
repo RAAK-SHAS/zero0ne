@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
-  Cloud, FolderOpen, Clock, Trash2, Settings, LogOut, Upload, Share2, Plus,
+  Cloud, FolderOpen, Clock3, Trash2, Settings, LogOut, Upload, Share2, Plus, Image, FileText, Code2,
 } from 'lucide-react';
 
 interface AppSidebarProps {
@@ -16,31 +16,63 @@ interface AppSidebarProps {
   storageTotal: number;
   onUploadClick: () => void;
   onNewFolderClick: () => void;
+  recentCount?: number;
+  sharedCount?: number;
+  typeCounts?: {
+    images: number;
+    documents: number;
+    code: number;
+  };
+  onQuickFilterClick?: (filter: 'images' | 'documents' | 'code') => void;
 }
 
 interface NavItemProps {
   icon: React.ElementType;
   label: string;
+  count?: number;
   active?: boolean;
   onClick: () => void;
 }
 
-const NavItem = ({ icon: Icon, label, active, onClick }: NavItemProps) => (
+const NavItem = ({ icon: Icon, label, count, active, onClick }: NavItemProps) => (
   <button
     onClick={onClick}
     className={cn(
-      'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+      'relative w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200',
       active
-        ? 'bg-primary/10 text-primary neon-border'
-        : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+        ? 'bg-primary/8 text-foreground border border-primary/25 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.08)]'
+        : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'
     )}
   >
+    <span
+      className={cn(
+        'absolute left-0 top-2 bottom-2 w-1 rounded-r-full transition-all duration-200',
+        active ? 'bg-primary opacity-100' : 'bg-transparent opacity-0'
+      )}
+    />
     <Icon className={cn("h-[18px] w-[18px] shrink-0", active && "text-primary")} />
     <span className="truncate">{label}</span>
+    {typeof count === 'number' && (
+      <span className={cn(
+        'ml-auto rounded-full px-2 py-0.5 text-[11px] tabular-nums',
+        active ? 'bg-primary/12 text-primary' : 'bg-muted text-muted-foreground'
+      )}>
+        {count}
+      </span>
+    )}
   </button>
 );
 
-export const AppSidebar = ({ storageUsed, storageTotal, onUploadClick, onNewFolderClick }: AppSidebarProps) => {
+export const AppSidebar = ({
+  storageUsed,
+  storageTotal,
+  onUploadClick,
+  onNewFolderClick,
+  recentCount = 0,
+  sharedCount = 0,
+  typeCounts,
+  onQuickFilterClick,
+}: AppSidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { signOut, user } = useAuth();
@@ -54,10 +86,10 @@ export const AppSidebar = ({ storageUsed, storageTotal, onUploadClick, onNewFold
   const initials = user?.email?.slice(0, 2).toUpperCase() || 'U';
 
   return (
-    <aside className="hidden md:flex flex-col w-[260px] border-r border-border glass-heavy h-screen sticky top-0">
+    <aside className="hidden md:flex flex-col w-[260px] border-r border-border/70 bg-sidebar/88 h-screen sticky top-0 backdrop-blur-xl">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-border shrink-0">
-        <div className="h-8 w-8 rounded-lg gradient-bg flex items-center justify-center neon-glow">
+      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-border/70 shrink-0">
+        <div className="h-8 w-8 rounded-lg gradient-bg flex items-center justify-center shadow-md">
           <Cloud className="h-4 w-4 text-primary-foreground" />
         </div>
         <span className="text-base font-bold tracking-tight">CloudStore</span>
@@ -65,12 +97,12 @@ export const AppSidebar = ({ storageUsed, storageTotal, onUploadClick, onNewFold
 
 
       {/* Action buttons */}
-      <div className="px-3 pt-3 pb-2 space-y-1.5 shrink-0">
-        <Button onClick={onUploadClick} className="w-full justify-start gap-2.5 h-10 gradient-bg border-0 text-primary-foreground hover:opacity-90 font-medium neon-glow">
+      <div className="px-3 pt-3 pb-2 space-y-2 shrink-0">
+        <Button onClick={onUploadClick} className="w-full justify-start gap-2.5 h-10 gradient-bg border-0 text-primary-foreground hover:opacity-90 font-medium shadow-lg shadow-primary/10">
           <Upload className="h-4 w-4" />
           Upload Files
         </Button>
-        <Button variant="outline" onClick={onNewFolderClick} className="w-full justify-start gap-2.5 h-9 text-sm font-medium neon-border hover:bg-accent/50">
+        <Button variant="outline" onClick={onNewFolderClick} className="w-full justify-start gap-2.5 h-9 text-sm font-medium border-border/80 bg-card/30 hover:bg-accent/50">
           <Plus className="h-4 w-4" />
           New Folder
         </Button>
@@ -78,17 +110,41 @@ export const AppSidebar = ({ storageUsed, storageTotal, onUploadClick, onNewFold
 
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-3">
-        <div className="space-y-0.5">
+        <div className="space-y-1">
           <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             Browse
           </p>
           <NavItem icon={FolderOpen} label="My Files" active={isActive('/dashboard')} onClick={() => navigate('/dashboard')} />
-          <NavItem icon={Clock} label="Recent" active={isActive('view=recent')} onClick={() => navigate('/dashboard?view=recent')} />
-          <NavItem icon={Share2} label="Shared" active={isActive('view=shared')} onClick={() => navigate('/dashboard?view=shared')} />
+          <NavItem icon={Clock3} label="Recent" count={recentCount} active={isActive('view=recent')} onClick={() => navigate('/dashboard?view=recent')} />
+          <NavItem icon={Share2} label="Shared" count={sharedCount} active={isActive('view=shared')} onClick={() => navigate('/dashboard?view=shared')} />
           <NavItem icon={Trash2} label="Trash" active={isActive('/trash')} onClick={() => navigate('/trash')} />
         </div>
+        {typeCounts && onQuickFilterClick && (
+          <>
+            <Separator className="my-4 bg-border/70" />
+            <div className="space-y-2">
+              <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                Quick Filters
+              </p>
+              <div className="grid grid-cols-1 gap-1.5 px-1">
+                <button onClick={() => onQuickFilterClick('images')} className="flex items-center justify-between rounded-lg border border-border/70 bg-card/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground">
+                  <span className="flex items-center gap-2"><Image className="h-3.5 w-3.5" />Images</span>
+                  <span className="tabular-nums">{typeCounts.images}</span>
+                </button>
+                <button onClick={() => onQuickFilterClick('documents')} className="flex items-center justify-between rounded-lg border border-border/70 bg-card/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground">
+                  <span className="flex items-center gap-2"><FileText className="h-3.5 w-3.5" />Docs</span>
+                  <span className="tabular-nums">{typeCounts.documents}</span>
+                </button>
+                <button onClick={() => onQuickFilterClick('code')} className="flex items-center justify-between rounded-lg border border-border/70 bg-card/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground">
+                  <span className="flex items-center gap-2"><Code2 className="h-3.5 w-3.5" />Code</span>
+                  <span className="tabular-nums">{typeCounts.code}</span>
+                </button>
+              </div>
+            </div>
+          </>
+        )}
         <Separator className="my-4 bg-border" />
-        <div className="space-y-0.5">
+        <div className="space-y-1">
           <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             Account
           </p>
