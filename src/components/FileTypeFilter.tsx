@@ -14,12 +14,11 @@ import {
   Music, 
   Archive, 
   File,
-  Files
+  Files,
+  FileCode2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-
-export type FileTypeCategory = 'all' | 'images' | 'videos' | 'documents' | 'audio' | 'archives' | 'other';
 
 interface FileTypeFilterProps {
   value: FileTypeCategory;
