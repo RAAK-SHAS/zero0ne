@@ -616,6 +616,7 @@ const Dashboard = () => {
       documents: 0,
       audio: 0,
       archives: 0,
+      code: 0,
       other: 0,
     };
     
@@ -746,8 +747,8 @@ const Dashboard = () => {
         onQuickFilterClick={(filter) => {
           setCurrentFolderId(null);
           setFilterFavorites(false);
-          setFilterType(filter === 'code' ? 'documents' : filter);
-          setSearchQuery(filter === 'code' ? '.py .ts .js .md' : '');
+          setFilterType(filter === 'code' ? 'code' : filter);
+          setSearchQuery('');
         }}
       />
 
@@ -886,8 +887,8 @@ const Dashboard = () => {
                 {/* Tag filter */}
                 {allTags.length > 0 && (
                   <Select 
-                    value={filterTag || ''} 
-                    onValueChange={(v) => setFilterTag(v || null)}
+                    value={filterTag || '__all_tags'} 
+                    onValueChange={(v) => setFilterTag(v === '__all_tags' ? null : v)}
                   >
                     <SelectTrigger className="h-9 w-[140px] bg-background/50 text-xs border-border/70">
                       <SelectValue placeholder="Tags" />
