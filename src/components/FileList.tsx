@@ -127,15 +127,18 @@ const FileRow = memo(({
                 </span>
               )}
             </div>
-              <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground sm:hidden">
               <span className="tabular-nums">{formatBytes(file.size_bytes)}</span>
               <span className="text-border">·</span>
               <span>{format(new Date(file.created_at), 'MMM d, yyyy')}</span>
-                <span className="text-border">·</span>
-                <span>Click to preview</span>
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="hidden sm:flex items-center gap-6 mr-2">
+        <span className="w-20 text-right text-xs text-muted-foreground tabular-nums">{formatBytes(file.size_bytes)}</span>
+        <span className="hidden md:inline w-32 text-right text-xs text-muted-foreground">{format(new Date(file.created_at), 'MMM d, yyyy')}</span>
       </div>
 
       <DropdownMenu>
