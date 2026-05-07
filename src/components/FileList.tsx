@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive, Star, Pencil } from 'lucide-react';
+import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive, Star, Pencil, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -8,6 +8,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { formatBytes, cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { EmptyState } from './EmptyState';
+import { SortConfig, SortField } from './SortControl';
 
 interface FileItem {
   id: string;
@@ -35,6 +37,9 @@ interface FileListProps {
   onExtractZip?: (fileId: string) => void;
   onToggleFavorite?: (fileId: string, current: boolean) => void;
   onEdit?: (fileId: string) => void;
+  sortConfig?: SortConfig;
+  onSortChange?: (cfg: SortConfig) => void;
+  onUploadClick?: () => void;
 }
 
 const isArchiveFile = (fileName: string): boolean => /\.(zip|rar|7z|tar|gz|bz2|xz|tgz)$/i.test(fileName);
@@ -122,15 +127,18 @@ const FileRow = memo(({
                 </span>
               )}
             </div>
-              <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground sm:hidden">
               <span className="tabular-nums">{formatBytes(file.size_bytes)}</span>
               <span className="text-border">·</span>
               <span>{format(new Date(file.created_at), 'MMM d, yyyy')}</span>
-                <span className="text-border">·</span>
-                <span>Click to preview</span>
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="hidden sm:flex items-center gap-6 mr-2">
+        <span className="w-20 text-right text-xs text-muted-foreground tabular-nums">{formatBytes(file.size_bytes)}</span>
+        <span className="hidden md:inline w-32 text-right text-xs text-muted-foreground">{format(new Date(file.created_at), 'MMM d, yyyy')}</span>
       </div>
 
       <DropdownMenu>
@@ -163,28 +171,75 @@ FileRow.displayName = 'FileRow';
 
 export const FileList = memo(({
   files, selectedFiles, onSelectFile, onSelectAll, onDownload, onShare,
-  onDelete, onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit
+  onDelete, onRename, onPreview, onEncrypt, onVersionHistory, onExtractZip, onToggleFavorite, onEdit,
+  sortConfig, onSortChange, onUploadClick,
 }: FileListProps) => {
   if (files.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/80 bg-card/40 py-20 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/70 bg-accent/30">
-          <FolderOpenIcon className="h-8 w-8 text-muted-foreground/50" />
-        </div>
-        <p className="font-medium text-foreground">No files yet</p>
-        <p className="mt-1 text-xs text-muted-foreground/80">Upload your first file to get started</p>
-      </div>
-    );
+    return <EmptyState onUpload={onUploadClick} />;
   }
 
   const allSelected = files.length > 0 && selectedFiles.length === files.length;
+  const sortable = !!onSortChange;
+
+  const handleSort = (field: SortField) => {
+    if (!onSortChange) return;
+    if (sortConfig?.field === field) {
+      onSortChange({ field, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' });
+    } else {
+      onSortChange({ field, direction: field === 'name' ? 'asc' : 'desc' });
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortConfig?.field !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    return sortConfig.direction === 'asc'
+      ? <ArrowUp className="h-3 w-3 text-primary" />
+      : <ArrowDown className="h-3 w-3 text-primary" />;
+  };
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/40 px-4 py-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/40 px-4 py-2 text-xs">
         <Checkbox checked={allSelected} onCheckedChange={onSelectAll} />
-        <span className="font-medium">{selectedFiles.length > 0 ? `${selectedFiles.length} selected` : 'Select all'}</span>
-        <span className="ml-auto tabular-nums">{files.length} file{files.length !== 1 ? 's' : ''}</span>
+        <button
+          type="button"
+          disabled={!sortable}
+          onClick={() => handleSort('name')}
+          className={cn(
+            "flex items-center gap-1.5 font-medium text-muted-foreground",
+            sortable && "hover:text-foreground transition-colors"
+          )}
+        >
+          Name <SortIcon field="name" />
+        </button>
+        <span className="ml-2 text-muted-foreground/70">
+          {selectedFiles.length > 0 ? `· ${selectedFiles.length} selected` : ''}
+        </span>
+        <div className="ml-auto flex items-center gap-6">
+          <button
+            type="button"
+            disabled={!sortable}
+            onClick={() => handleSort('size')}
+            className={cn(
+              "hidden sm:flex w-20 items-center justify-end gap-1 font-medium text-muted-foreground tabular-nums",
+              sortable && "hover:text-foreground transition-colors"
+            )}
+          >
+            Size <SortIcon field="size" />
+          </button>
+          <button
+            type="button"
+            disabled={!sortable}
+            onClick={() => handleSort('date')}
+            className={cn(
+              "hidden md:flex w-32 items-center justify-end gap-1 font-medium text-muted-foreground",
+              sortable && "hover:text-foreground transition-colors"
+            )}
+          >
+            Modified <SortIcon field="date" />
+          </button>
+          <span className="w-8" />
+        </div>
       </div>
       <div className="space-y-0.5">
         {files.map((file) => (
@@ -204,8 +259,3 @@ export const FileList = memo(({
 
 FileList.displayName = 'FileList';
 
-const FolderOpenIcon = ({ className }: { className?: string }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>
-  </svg>
-);

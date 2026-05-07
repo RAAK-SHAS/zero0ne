@@ -42,6 +42,8 @@ import { GlobalContentSearchDialog, useGlobalContentSearch } from '@/components/
 import { CameraUploadButton } from '@/components/CameraUploadButton';
 import { SystemLog, useSystemLog } from '@/components/SystemLog';
 import { TerminalPanel } from '@/components/TerminalPanel';
+import { FileGridSkeleton } from '@/components/FileGridSkeleton';
+import { EmptyState } from '@/components/EmptyState';
 import { useTerminal } from '@/hooks/useTerminal';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
@@ -115,7 +117,14 @@ const Dashboard = () => {
   const [showUploadQueue, setShowUploadQueue] = useState(false);
   const [resumeUploadId, setResumeUploadId] = useState<string | null>(null);
   const [resumeFileName, setResumeFileName] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
+    if (typeof window === 'undefined') return 'list';
+    const saved = localStorage.getItem('cloudstore-view-mode');
+    return saved === 'grid' ? 'grid' : 'list';
+  });
+  useEffect(() => {
+    localStorage.setItem('cloudstore-view-mode', viewMode);
+  }, [viewMode]);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [filterFavorites, setFilterFavorites] = useState(false);
   const [filterTag, setFilterTag] = useState<string | null>(null);
@@ -716,16 +725,7 @@ const Dashboard = () => {
 
   const viewTitle = currentView === 'recent' ? 'Recent Files' : currentView === 'shared' ? 'Shared Files' : filterFavorites ? 'Favorites' : 'My Files';
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // (Removed full-page spinner; we render skeleton inside the dashboard while loading.)
 
   return (
     <div className="relative flex h-screen bg-background">
@@ -970,7 +970,11 @@ const Dashboard = () => {
                 )}
                 
                 {/* Files */}
-                {viewMode === 'list' ? (
+                {loading ? (
+                  <FileGridSkeleton view={viewMode} count={viewMode === 'grid' ? 10 : 6} />
+                ) : filteredAndSortedFiles.length === 0 && currentFolders.length === 0 ? (
+                  <EmptyState onUpload={() => navigate('/upload')} />
+                ) : viewMode === 'list' ? (
                   <FileList
                     files={filteredAndSortedFiles}
                     selectedFiles={selectedFiles}
@@ -986,6 +990,9 @@ const Dashboard = () => {
                     onExtractZip={handleExtractZip}
                     onToggleFavorite={handleToggleFavorite}
                     onEdit={handleEdit}
+                    sortConfig={sortConfig}
+                    onSortChange={setSortConfig}
+                    onUploadClick={() => navigate('/upload')}
                   />
                 ) : (
                   <FileGrid

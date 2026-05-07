@@ -394,11 +394,15 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'ttrbjdpiccvfaccwpodu';
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0cmJqZHBpY2N2ZmFjY3dwb2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1ODY0MzMsImV4cCI6MjA4MDE2MjQzM30.FvgQ19ihD7nd4Ty4QSrbnYoUwm2RNGnLf032-j_yG4M';
 
+      // IMPORTANT: Do NOT set Authorization in initial headers.
+      // tus-js-client uses XHR.setRequestHeader which APPENDS duplicate header values
+      // (e.g. "Bearer t1, Bearer t2") when both static headers and onBeforeRequest set it,
+      // causing "Invalid Compact JWS" 403s. Set Authorization only in onBeforeRequest.
+      let currentToken = accessToken;
       const tusUpload = new tus.Upload(file, {
         endpoint: `https://${projectId}.supabase.co/storage/v1/upload/resumable`,
         retryDelays: [0, 1000, 3000, 5000, 10000, 20000, 30000, 60000, 120000, 300000],
         headers: {
-          Authorization: `Bearer ${accessToken}`,
           apikey: anonKey,
         },
         uploadDataDuringCreation: true,
@@ -418,7 +422,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onBeforeRequest: async (req) => {
           const freshToken = await getValidToken();
-          if (freshToken) req.setHeader('Authorization', `Bearer ${freshToken}`);
+          if (freshToken) currentToken = freshToken;
+          req.setHeader('Authorization', `Bearer ${currentToken}`);
         },
         onError: async (error) => {
           console.error('TUS upload error:', error);
@@ -448,7 +453,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             authRetryAttempts.current[uploadId] = (authRetryAttempts.current[uploadId] || 0) + 1;
             const newToken = await refreshAuthToken();
             if (newToken && tusUploads.current[uploadId]) {
-              tusUpload.options.headers = { ...tusUpload.options.headers, Authorization: `Bearer ${newToken}` };
+              currentToken = newToken;
               activeSlots.current.add(uploadId);
               tusUpload.start();
               return;
@@ -535,12 +540,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
       if (!tokenRefreshTimer.current) {
         tokenRefreshTimer.current = setInterval(async () => {
-          const newToken = await refreshAuthToken();
-          if (newToken) {
-            Object.values(tusUploads.current).forEach(u => {
-              if (u.options.headers) u.options.headers.Authorization = `Bearer ${newToken}`;
-            });
-          }
+          // onBeforeRequest pulls a fresh token per request via getValidToken; no header mutation needed.
+          await refreshAuthToken();
         }, 25 * 60 * 1000);
       }
 
