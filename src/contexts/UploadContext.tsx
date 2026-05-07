@@ -540,12 +540,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
       if (!tokenRefreshTimer.current) {
         tokenRefreshTimer.current = setInterval(async () => {
-          const newToken = await refreshAuthToken();
-          if (newToken) {
-            Object.values(tusUploads.current).forEach(u => {
-              if (u.options.headers) u.options.headers.Authorization = `Bearer ${newToken}`;
-            });
-          }
+          // onBeforeRequest pulls a fresh token per request via getValidToken; no header mutation needed.
+          await refreshAuthToken();
         }, 25 * 60 * 1000);
       }
 
