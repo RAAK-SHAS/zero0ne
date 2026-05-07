@@ -42,6 +42,8 @@ import { GlobalContentSearchDialog, useGlobalContentSearch } from '@/components/
 import { CameraUploadButton } from '@/components/CameraUploadButton';
 import { SystemLog, useSystemLog } from '@/components/SystemLog';
 import { TerminalPanel } from '@/components/TerminalPanel';
+import { FileGridSkeleton } from '@/components/FileGridSkeleton';
+import { EmptyState } from '@/components/EmptyState';
 import { useTerminal } from '@/hooks/useTerminal';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
