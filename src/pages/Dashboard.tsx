@@ -115,7 +115,14 @@ const Dashboard = () => {
   const [showUploadQueue, setShowUploadQueue] = useState(false);
   const [resumeUploadId, setResumeUploadId] = useState<string | null>(null);
   const [resumeFileName, setResumeFileName] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
+    if (typeof window === 'undefined') return 'list';
+    const saved = localStorage.getItem('cloudstore-view-mode');
+    return saved === 'grid' ? 'grid' : 'list';
+  });
+  useEffect(() => {
+    localStorage.setItem('cloudstore-view-mode', viewMode);
+  }, [viewMode]);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [filterFavorites, setFilterFavorites] = useState(false);
   const [filterTag, setFilterTag] = useState<string | null>(null);
