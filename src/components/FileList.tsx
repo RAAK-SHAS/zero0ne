@@ -37,6 +37,9 @@ interface FileListProps {
   onExtractZip?: (fileId: string) => void;
   onToggleFavorite?: (fileId: string, current: boolean) => void;
   onEdit?: (fileId: string) => void;
+  sortConfig?: SortConfig;
+  onSortChange?: (cfg: SortConfig) => void;
+  onUploadClick?: () => void;
 }
 
 const isArchiveFile = (fileName: string): boolean => /\.(zip|rar|7z|tar|gz|bz2|xz|tgz)$/i.test(fileName);
