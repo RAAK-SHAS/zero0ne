@@ -453,7 +453,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             authRetryAttempts.current[uploadId] = (authRetryAttempts.current[uploadId] || 0) + 1;
             const newToken = await refreshAuthToken();
             if (newToken && tusUploads.current[uploadId]) {
-              tusUpload.options.headers = { ...tusUpload.options.headers, Authorization: `Bearer ${newToken}` };
+              currentToken = newToken;
               activeSlots.current.add(uploadId);
               tusUpload.start();
               return;
