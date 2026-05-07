@@ -970,7 +970,11 @@ const Dashboard = () => {
                 )}
                 
                 {/* Files */}
-                {viewMode === 'list' ? (
+                {loading ? (
+                  <FileGridSkeleton view={viewMode} count={viewMode === 'grid' ? 10 : 6} />
+                ) : filteredAndSortedFiles.length === 0 && currentFolders.length === 0 ? (
+                  <EmptyState onUpload={() => navigate('/upload')} />
+                ) : viewMode === 'list' ? (
                   <FileList
                     files={filteredAndSortedFiles}
                     selectedFiles={selectedFiles}
@@ -986,6 +990,9 @@ const Dashboard = () => {
                     onExtractZip={handleExtractZip}
                     onToggleFavorite={handleToggleFavorite}
                     onEdit={handleEdit}
+                    sortConfig={sortConfig}
+                    onSortChange={setSortConfig}
+                    onUploadClick={() => navigate('/upload')}
                   />
                 ) : (
                   <FileGrid
