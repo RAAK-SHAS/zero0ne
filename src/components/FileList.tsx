@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive, Star, Pencil } from 'lucide-react';
+import { MoreVertical, Download, Share2, Trash2, Edit2, Eye, Lock, Clock, Archive, Star, Pencil, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -8,6 +8,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { formatBytes, cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { EmptyState } from './EmptyState';
+import { SortConfig, SortField } from './SortControl';
 
 interface FileItem {
   id: string;
