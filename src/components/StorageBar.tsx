@@ -26,8 +26,8 @@ export const StorageBar = ({ used, total, compact = false }: StorageBarProps) =>
       <div className="space-y-2">
         <div className="flex justify-between text-xs">
           <span className="text-muted-foreground flex items-center gap-1">
-            <Zap className="h-3 w-3 text-primary" />
-            Power Cell
+            <HardDrive className="h-3 w-3 text-primary" />
+            Storage
           </span>
           <span className="font-mono text-primary tabular-nums text-[11px]">{percentage.toFixed(0)}%</span>
         </div>
