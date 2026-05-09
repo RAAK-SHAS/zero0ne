@@ -91,10 +91,12 @@ const FileCard = memo(({
   }, [file.id]);
 
   return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
       <div
       className={cn(
-          "group relative flex min-h-[220px] flex-col rounded-lg border p-4 cursor-pointer transition-all duration-200",
-          "border-border/70 bg-card shadow-sm hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg",
+          "group relative flex min-h-[220px] flex-col rounded-lg border p-4 cursor-pointer transition-all duration-150",
+          "border-border/70 surface-gradient shadow-sm hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg",
           isSelected && "border-primary/40 bg-primary/5 shadow-[0_0_0_1px_hsl(var(--primary)/0.15)]"
       )}
       draggable
