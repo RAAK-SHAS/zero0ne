@@ -595,7 +595,20 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     const newUploads: Record<string, UploadItem> = {};
     const newQueueItems: string[] = [];
 
-    files.forEach((file, index) => {
+    // Filter out files that exceed the max size; toast and skip
+    const accepted: File[] = [];
+    files.forEach(file => {
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast.error(
+          `${file.name} (${formatBytes(file.size)}) exceeds the maximum allowed upload size of ${formatBytes(MAX_FILE_SIZE_BYTES)}.`
+        );
+        return;
+      }
+      accepted.push(file);
+    });
+    if (accepted.length === 0) return;
+
+    accepted.forEach((file, index) => {
       const uploadId = generateUploadId(file, userId);
       const sanitizedName = sanitizeFileName(file.name);
       const storagePath = folderPath
