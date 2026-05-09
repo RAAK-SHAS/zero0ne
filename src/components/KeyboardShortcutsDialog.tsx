@@ -36,7 +36,6 @@ export const KeyboardShortcutsDialog = () => {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // ignore when typing in an input/textarea/contenteditable
       const tag = (e.target as HTMLElement | null)?.tagName;
       const isEditable = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable;
       if (isEditable) return;
@@ -45,8 +44,13 @@ export const KeyboardShortcutsDialog = () => {
         setOpen(prev => !prev);
       }
     };
+    const openHandler = () => setOpen(true);
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('open-shortcuts', openHandler);
+    return () => {
+      window.removeEventListener('keydown', handler);
+      window.removeEventListener('open-shortcuts', openHandler);
+    };
   }, []);
 
   return (
