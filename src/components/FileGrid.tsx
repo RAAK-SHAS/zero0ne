@@ -180,6 +180,17 @@ const FileCard = memo(({
         </div>
       </div>
     </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48">
+        <ContextMenuItem onClick={() => onPreview(file.id)}><Eye className="h-4 w-4 mr-2" />Preview</ContextMenuItem>
+        <ContextMenuItem onClick={() => onRename(file.id)}><Edit2 className="h-4 w-4 mr-2" />Rename</ContextMenuItem>
+        <ContextMenuItem onClick={() => { navigator.clipboard.writeText(file.id); }}><Share className="h-4 w-4 mr-2" />Copy Link</ContextMenuItem>
+        <ContextMenuItem onClick={() => onDownload(file.id)}><Download className="h-4 w-4 mr-2" />Download</ContextMenuItem>
+        <ContextMenuItem onClick={() => onShare(file.id)}><Share className="h-4 w-4 mr-2" />Share</ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => onDelete(file.id)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Delete</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 });
 
