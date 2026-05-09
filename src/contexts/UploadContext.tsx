@@ -433,9 +433,29 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onError: async (error) => {
           console.error('TUS upload error:', error);
+          const status = (error as any)?.originalResponse?.getStatus?.();
           incrementRetryCount();
           activeSlots.current.delete(uploadId);
           const errorMessage = error.message?.toLowerCase?.() || '';
+
+          // 413: file too large — stop ALL retries, surface a clear toast
+          if (status === 413 || errorMessage.includes('maximum size exceeded')) {
+            if (autoRetryTimers.current[uploadId]) {
+              clearTimeout(autoRetryTimers.current[uploadId]);
+              delete autoRetryTimers.current[uploadId];
+            }
+            pausedUploads.current.add(uploadId);
+            state = { ...state, status: 'error', error: 'File exceeds the server upload limit', autoRetryCount: MAX_AUTO_RETRIES };
+            uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
+            setUploads(prev => ({ ...prev, [uploadId]: state }));
+            await saveUploadState(state);
+            toast.error(`${state.fileName} exceeds the maximum allowed upload size.`);
+            delete tusUploads.current[uploadId];
+            delete speedTracking.current[uploadId];
+            fillSlots();
+            return;
+          }
+
           const isAuthError =
             errorMessage.includes('401') ||
             errorMessage.includes('403') ||
