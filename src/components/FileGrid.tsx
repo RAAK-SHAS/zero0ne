@@ -12,7 +12,6 @@ import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
 
 interface FileItem {
   id: string;
