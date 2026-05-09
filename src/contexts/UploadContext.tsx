@@ -5,17 +5,22 @@ import * as tus from 'tus-js-client';
 
 const DB_NAME = 'CloudStoreUploads';
 const STORE_NAME = 'uploads';
-const TUS_CHUNK_SIZE_SMALL = 6 * 1024 * 1024;
-const TUS_CHUNK_SIZE_MEDIUM = 20 * 1024 * 1024;
-const TUS_CHUNK_SIZE_LARGE = 50 * 1024 * 1024;
+// Fixed 6MB chunk size — required by Supabase Storage TUS endpoint
+export const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
+// Max upload size (default 50GB) — overridable via env
+export const MAX_FILE_SIZE_BYTES = Number(
+  (import.meta as any).env?.VITE_MAX_FILE_SIZE_BYTES ?? 53687091200
+);
 const MAX_CONCURRENT_UPLOADS = 3;
 const MAX_AUTO_RETRIES = 5;
 const TOKEN_REFRESH_INTERVAL = 30 * 60 * 1000;
 
-const getChunkSize = (fileSize: number): number => {
-  if (fileSize > 1024 * 1024 * 1024) return TUS_CHUNK_SIZE_LARGE;
-  if (fileSize > 100 * 1024 * 1024) return TUS_CHUNK_SIZE_MEDIUM;
-  return TUS_CHUNK_SIZE_SMALL;
+const getChunkSize = (_fileSize: number): number => TUS_CHUNK_SIZE;
+
+const formatBytes = (bytes: number): string => {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
 };
 
 const getRetryDelay = (attempt: number): number => {
@@ -416,7 +421,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onShouldRetry: (err) => {
           const status = (err as any)?.originalResponse?.getStatus?.();
-          if (status === 403 || status === 401) return false;
+          // Never retry: auth failures or "payload too large"
+          if (status === 401 || status === 403 || status === 413) return false;
           if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
           return true;
         },
@@ -427,9 +433,29 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onError: async (error) => {
           console.error('TUS upload error:', error);
+          const status = (error as any)?.originalResponse?.getStatus?.();
           incrementRetryCount();
           activeSlots.current.delete(uploadId);
           const errorMessage = error.message?.toLowerCase?.() || '';
+
+          // 413: file too large — stop ALL retries, surface a clear toast
+          if (status === 413 || errorMessage.includes('maximum size exceeded')) {
+            if (autoRetryTimers.current[uploadId]) {
+              clearTimeout(autoRetryTimers.current[uploadId]);
+              delete autoRetryTimers.current[uploadId];
+            }
+            pausedUploads.current.add(uploadId);
+            state = { ...state, status: 'error', error: 'File exceeds the server upload limit', autoRetryCount: MAX_AUTO_RETRIES };
+            uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
+            setUploads(prev => ({ ...prev, [uploadId]: state }));
+            await saveUploadState(state);
+            toast.error(`${state.fileName} exceeds the maximum allowed upload size.`);
+            delete tusUploads.current[uploadId];
+            delete speedTracking.current[uploadId];
+            fillSlots();
+            return;
+          }
+
           const isAuthError =
             errorMessage.includes('401') ||
             errorMessage.includes('403') ||
@@ -569,7 +595,20 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     const newUploads: Record<string, UploadItem> = {};
     const newQueueItems: string[] = [];
 
-    files.forEach((file, index) => {
+    // Filter out files that exceed the max size; toast and skip
+    const accepted: File[] = [];
+    files.forEach(file => {
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast.error(
+          `${file.name} (${formatBytes(file.size)}) exceeds the maximum allowed upload size of ${formatBytes(MAX_FILE_SIZE_BYTES)}.`
+        );
+        return;
+      }
+      accepted.push(file);
+    });
+    if (accepted.length === 0) return;
+
+    accepted.forEach((file, index) => {
       const uploadId = generateUploadId(file, userId);
       const sanitizedName = sanitizeFileName(file.name);
       const storagePath = folderPath
