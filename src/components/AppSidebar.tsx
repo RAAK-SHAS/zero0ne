@@ -25,6 +25,7 @@ interface AppSidebarProps {
     code: number;
   };
   onQuickFilterClick?: (filter: 'images' | 'documents' | 'code') => void;
+  onCollapse?: () => void;
 }
 
 interface NavItemProps {
