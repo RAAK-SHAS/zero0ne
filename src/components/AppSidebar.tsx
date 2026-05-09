@@ -179,6 +179,15 @@ export const AppSidebar = ({
             </span>
           </div>
           <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => window.dispatchEvent(new CustomEvent('open-shortcuts'))}
+              title="Keyboard shortcuts (?)"
+              className="h-8 w-8"
+            >
+              <Keyboard className="h-3.5 w-3.5" />
+            </Button>
             <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={signOut} title="Sign out" className="h-8 w-8">
               <LogOut className="h-3.5 w-3.5" />
