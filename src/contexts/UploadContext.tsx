@@ -421,7 +421,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onShouldRetry: (err) => {
           const status = (err as any)?.originalResponse?.getStatus?.();
-          if (status === 403 || status === 401) return false;
+          // Never retry: auth failures or "payload too large"
+          if (status === 401 || status === 403 || status === 413) return false;
           if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
           return true;
         },
