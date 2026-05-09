@@ -223,6 +223,8 @@
     height: 2px;
     background: linear-gradient(90deg, transparent, hsl(168, 100%, 50%, 0.3), transparent);
     animation: scan 4s linear infinite;
+  }
+
   /* Standardized 150ms transition for all interactive states */
   .transition-fast {
     transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
