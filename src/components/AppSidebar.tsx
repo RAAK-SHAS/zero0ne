@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Cloud, FolderOpen, Clock3, Trash2, Settings, LogOut, Upload, Share2, Plus, Image, FileText, Code2,
+  Keyboard, ChevronLeft,
 } from 'lucide-react';
 
 interface AppSidebarProps {
@@ -24,6 +25,7 @@ interface AppSidebarProps {
     code: number;
   };
   onQuickFilterClick?: (filter: 'images' | 'documents' | 'code') => void;
+  onCollapse?: () => void;
 }
 
 interface NavItemProps {
@@ -72,6 +74,7 @@ export const AppSidebar = ({
   sharedCount = 0,
   typeCounts,
   onQuickFilterClick,
+  onCollapse,
 }: AppSidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -86,13 +89,20 @@ export const AppSidebar = ({
   const initials = user?.email?.slice(0, 2).toUpperCase() || 'U';
 
   return (
-    <aside className="hidden md:flex flex-col w-[260px] border-r border-border/70 bg-sidebar/88 h-screen sticky top-0 backdrop-blur-xl">
+    <aside className="hidden md:flex flex-col w-[260px] border-r border-border/70 sidebar-gradient h-screen sticky top-0 backdrop-blur-xl animate-in slide-in-from-left duration-200">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-border/70 shrink-0">
-        <div className="h-8 w-8 rounded-lg gradient-bg flex items-center justify-center shadow-md">
-          <Cloud className="h-4 w-4 text-primary-foreground" />
+      <div className="flex items-center justify-between px-5 h-16 border-b border-border/70 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-lg gradient-bg flex items-center justify-center shadow-md">
+            <Cloud className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <span className="text-base font-bold tracking-tight">CloudStore</span>
         </div>
-        <span className="text-base font-bold tracking-tight">CloudStore</span>
+        {onCollapse && (
+          <Button variant="ghost" size="icon" onClick={onCollapse} className="h-7 w-7" title="Collapse sidebar">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
 
@@ -169,6 +179,15 @@ export const AppSidebar = ({
             </span>
           </div>
           <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => window.dispatchEvent(new CustomEvent('open-shortcuts'))}
+              title="Keyboard shortcuts (?)"
+              className="h-8 w-8"
+            >
+              <Keyboard className="h-3.5 w-3.5" />
+            </Button>
             <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={signOut} title="Sign out" className="h-8 w-8">
               <LogOut className="h-3.5 w-3.5" />

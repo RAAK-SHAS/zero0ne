@@ -8,6 +8,9 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { cn } from '@/lib/utils';
 
 interface FileItem {
@@ -88,10 +91,12 @@ const FileCard = memo(({
   }, [file.id]);
 
   return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
       <div
       className={cn(
-          "group relative flex min-h-[220px] flex-col rounded-lg border p-4 cursor-pointer transition-all duration-200",
-          "border-border/70 bg-card shadow-sm hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg",
+          "group relative flex min-h-[220px] flex-col rounded-lg border p-4 cursor-pointer transition-all duration-150",
+          "border-border/70 surface-gradient shadow-sm hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg",
           isSelected && "border-primary/40 bg-primary/5 shadow-[0_0_0_1px_hsl(var(--primary)/0.15)]"
       )}
       draggable
@@ -175,6 +180,17 @@ const FileCard = memo(({
         </div>
       </div>
     </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48">
+        <ContextMenuItem onClick={() => onPreview(file.id)}><Eye className="h-4 w-4 mr-2" />Preview</ContextMenuItem>
+        <ContextMenuItem onClick={() => onRename(file.id)}><Edit2 className="h-4 w-4 mr-2" />Rename</ContextMenuItem>
+        <ContextMenuItem onClick={() => { navigator.clipboard.writeText(file.id); }}><Share className="h-4 w-4 mr-2" />Copy Link</ContextMenuItem>
+        <ContextMenuItem onClick={() => onDownload(file.id)}><Download className="h-4 w-4 mr-2" />Download</ContextMenuItem>
+        <ContextMenuItem onClick={() => onShare(file.id)}><Share className="h-4 w-4 mr-2" />Share</ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => onDelete(file.id)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Delete</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 });
 
