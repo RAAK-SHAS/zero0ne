@@ -397,6 +397,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       if (!accessToken) throw new Error('Not authenticated');
 
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'ttrbjdpiccvfaccwpodu';
+      const storageHost = `https://${projectId}.storage.supabase.co`;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0cmJqZHBpY2N2ZmFjY3dwb2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1ODY0MzMsImV4cCI6MjA4MDE2MjQzM30.FvgQ19ihD7nd4Ty4QSrbnYoUwm2RNGnLf032-j_yG4M';
 
       // IMPORTANT: Do NOT set Authorization in initial headers.
@@ -408,7 +409,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       // uploads can fail immediately with a 413 before resumable chunking even starts.
       let currentToken = accessToken;
       const tusUpload = new tus.Upload(file, {
-        endpoint: `https://${projectId}.supabase.co/storage/v1/upload/resumable`,
+        endpoint: `${storageHost}/storage/v1/upload/resumable`,
         retryDelays: [0, 1000, 3000, 5000, 10000, 20000, 30000, 60000, 120000, 300000],
         headers: {
           apikey: anonKey,
