@@ -403,6 +403,9 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       // tus-js-client uses XHR.setRequestHeader which APPENDS duplicate header values
       // (e.g. "Bearer t1, Bearer t2") when both static headers and onBeforeRequest set it,
       // causing "Invalid Compact JWS" 403s. Set Authorization only in onBeforeRequest.
+      // Also keep uploadDataDuringCreation disabled so the POST create request stays tiny.
+      // Large files must stream through follow-up PATCH chunk requests, otherwise multi-GB
+      // uploads can fail immediately with a 413 before resumable chunking even starts.
       let currentToken = accessToken;
       const tusUpload = new tus.Upload(file, {
         endpoint: `https://${projectId}.supabase.co/storage/v1/upload/resumable`,
@@ -410,7 +413,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         headers: {
           apikey: anonKey,
         },
-        uploadDataDuringCreation: true,
+        uploadDataDuringCreation: false,
         removeFingerprintOnSuccess: true,
         chunkSize: getChunkSize(file.size),
         metadata: {
