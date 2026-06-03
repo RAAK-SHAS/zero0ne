@@ -402,12 +402,10 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0cmJqZHBpY2N2ZmFjY3dwb2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1ODY0MzMsImV4cCI6MjA4MDE2MjQzM30.FvgQ19ihD7nd4Ty4QSrbnYoUwm2RNGnLf032-j_yG4M';
 
       // IMPORTANT: Do NOT set Authorization in initial headers.
-      // tus-js-client uses XHR.setRequestHeader which APPENDS duplicate header values
-      // (e.g. "Bearer t1, Bearer t2") when both static headers and onBeforeRequest set it,
-      // causing "Invalid Compact JWS" 403s. Set Authorization only in onBeforeRequest.
-      // Also keep uploadDataDuringCreation disabled so the POST create request stays tiny.
-      // Large files must stream through follow-up PATCH chunk requests, otherwise multi-GB
-      // uploads can fail immediately with a 413 before resumable chunking even starts.
+      // tus-js-client appends duplicate header values if the same header is set both
+      // in static headers and in onBeforeRequest, which can break auth. Keep the auth
+      // token in onBeforeRequest only, and align the rest of the config with the
+      // documented resumable upload settings for large files.
       let currentToken = accessToken;
       const tusUpload = new tus.Upload(file, {
         endpoint: `${storageHost}/storage/v1/upload/resumable`,
