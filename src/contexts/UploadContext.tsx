@@ -5,8 +5,10 @@ import * as tus from 'tus-js-client';
 
 const DB_NAME = 'CloudStoreUploads';
 const STORE_NAME = 'uploads';
-// Fixed 6MB chunk size — required by Supabase Storage TUS endpoint
-export const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
+// Use a safer sub-6MB chunk size for resumable PATCH requests.
+// The bucket limit is already 50GB, but some storage/proxy paths still reject
+// request bodies right around the 6MB boundary with a 413 before the upload can continue.
+export const TUS_CHUNK_SIZE = 5 * 1024 * 1024;
 // Max upload size (default 50GB) — overridable via env
 export const MAX_FILE_SIZE_BYTES = Number(
   (import.meta as any).env?.VITE_MAX_FILE_SIZE_BYTES ?? 53687091200
