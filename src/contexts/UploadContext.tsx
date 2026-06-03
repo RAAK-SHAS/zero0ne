@@ -413,7 +413,6 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         endpoint: `${storageHost}/storage/v1/upload/resumable`,
         retryDelays: [0, 1000, 3000, 5000, 10000, 20000, 30000, 60000, 120000, 300000],
         headers: {
-          authorization: `Bearer ${currentToken}`,
           apikey: anonKey,
           'x-upsert': 'false',
         },
@@ -437,8 +436,6 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           const freshToken = await getValidToken();
           if (freshToken) currentToken = freshToken;
           req.setHeader('Authorization', `Bearer ${currentToken}`);
-          req.setHeader('apikey', anonKey);
-          req.setHeader('x-upsert', 'false');
         },
         onUploadUrlAvailable: async () => {
           state = { ...state, tusUploadUrl: tusUpload.url ?? state.tusUploadUrl };
