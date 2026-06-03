@@ -5,10 +5,9 @@ import * as tus from 'tus-js-client';
 
 const DB_NAME = 'CloudStoreUploads';
 const STORE_NAME = 'uploads';
-// Use a safer sub-6MB chunk size for resumable PATCH requests.
-// The bucket limit is already 50GB, but some storage/proxy paths still reject
-// request bodies right around the 6MB boundary with a 413 before the upload can continue.
-export const TUS_CHUNK_SIZE = 5 * 1024 * 1024;
+// Supabase's resumable upload path currently expects 6MB chunks.
+// Keep this aligned with the official storage docs for large-file uploads.
+export const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
 // Max upload size (default 50GB) — overridable via env
 export const MAX_FILE_SIZE_BYTES = Number(
   (import.meta as any).env?.VITE_MAX_FILE_SIZE_BYTES ?? 53687091200
@@ -414,9 +413,11 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         endpoint: `${storageHost}/storage/v1/upload/resumable`,
         retryDelays: [0, 1000, 3000, 5000, 10000, 20000, 30000, 60000, 120000, 300000],
         headers: {
+          authorization: `Bearer ${currentToken}`,
           apikey: anonKey,
+          'x-upsert': 'false',
         },
-        uploadDataDuringCreation: false,
+        uploadDataDuringCreation: true,
         removeFingerprintOnSuccess: true,
         chunkSize: getChunkSize(file.size),
         metadata: {
@@ -436,6 +437,14 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           const freshToken = await getValidToken();
           if (freshToken) currentToken = freshToken;
           req.setHeader('Authorization', `Bearer ${currentToken}`);
+          req.setHeader('apikey', anonKey);
+          req.setHeader('x-upsert', 'false');
+        },
+        onUploadUrlAvailable: async () => {
+          state = { ...state, tusUploadUrl: tusUpload.url ?? state.tusUploadUrl };
+          uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
+          setUploads(prev => ({ ...prev, [uploadId]: state }));
+          await saveUploadState(state);
         },
         onError: async (error) => {
           console.error('TUS upload error:', error);
@@ -451,13 +460,21 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
               delete autoRetryTimers.current[uploadId];
             }
             pausedUploads.current.add(uploadId);
-            state = { ...state, status: 'error', error: 'File exceeds the server upload limit', autoRetryCount: MAX_AUTO_RETRIES };
+            state = {
+              ...state,
+              status: 'error',
+              error: 'File exceeds the server upload limit. The backend global storage limit is still lower than this file size.',
+              autoRetryCount: MAX_AUTO_RETRIES,
+              nextRetryAt: undefined,
+            };
             uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
             setUploads(prev => ({ ...prev, [uploadId]: state }));
             await saveUploadState(state);
-            toast.error(`${state.fileName} exceeds the maximum allowed upload size.`);
+            toast.error(`${state.fileName} is blocked by the backend upload limit.`);
             delete tusUploads.current[uploadId];
             delete speedTracking.current[uploadId];
+            delete authRetryAttempts.current[uploadId];
+            activeSlots.current.delete(uploadId);
             fillSlots();
             return;
           }
@@ -577,8 +594,12 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         }, 25 * 60 * 1000);
       }
 
-      const previousUploads = await tusUpload.findPreviousUploads();
-      if (previousUploads.length > 0) tusUpload.resumeFromPreviousUpload(previousUploads[0]);
+      if (state.tusUploadUrl) {
+        tusUpload.url = state.tusUploadUrl;
+      } else {
+        const previousUploads = await tusUpload.findPreviousUploads();
+        if (previousUploads.length > 0) tusUpload.resumeFromPreviousUpload(previousUploads[0]);
+      }
 
       tusUpload.start();
     } catch (error: any) {
