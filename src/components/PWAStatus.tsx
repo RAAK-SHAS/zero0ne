@@ -30,6 +30,9 @@ export const PWAStatus = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!('serviceWorker' in navigator)) return;
+    if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/upload')) {
+      return;
+    }
     // Dynamic import so the module only loads in the browser.
     import('virtual:pwa-register')
       .then(({ registerSW }) => {

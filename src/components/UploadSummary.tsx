@@ -96,7 +96,7 @@ export const UploadSummary = memo(({ onOpenQueue }: UploadSummaryProps) => {
               <Upload className="h-4 w-4" />
             )}
             <span className="font-medium text-sm">
-              {isUploading ? 'Uploading...' : allDone ? 'Upload Complete' : 'Uploads'}
+              {isUploading ? 'Uploading...' : allDone ? (failedUploads.length > 0 ? 'Uploads finished with errors' : 'Upload Complete') : 'Uploads'}
             </span>
           </div>
           <div className="flex items-center gap-1">
