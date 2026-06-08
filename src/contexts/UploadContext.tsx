@@ -950,8 +950,11 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       id: upload.id, fileName: upload.fileName, fileSize: upload.fileSize, storagePath: upload.storagePath,
       totalChunks: upload.totalChunks, uploadedChunks: upload.uploadedChunks,
       lastUploadedChunk: upload.uploadedChunks.length > 0 ? upload.uploadedChunks[upload.uploadedChunks.length - 1] : null,
-      failedAt: upload.status === 'error' ? new Date().toISOString() : null,
+      failedAt: upload.lastFailureAt ? new Date(upload.lastFailureAt).toISOString() : null,
       error: upload.error || null, createdAt: upload.createdAt, status: upload.status,
+      lastRequest: upload.lastRequest || null,
+      lastFailureAt: upload.lastFailureAt ?? null,
+      restoredFromStorage: upload.restoredFromStorage ?? false,
     };
   }, [uploads]);
 
