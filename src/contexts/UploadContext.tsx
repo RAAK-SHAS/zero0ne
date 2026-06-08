@@ -29,6 +29,59 @@ const getRetryDelay = (attempt: number): number => {
   return Math.min(2000 * Math.pow(2, attempt), 60000);
 };
 
+const getRequestStep = (method?: string, url?: string): UploadRequestStep => {
+  const normalizedMethod = method?.toUpperCase();
+  if (normalizedMethod === 'POST') return 'create';
+  if (normalizedMethod === 'HEAD') return 'resume';
+  if (normalizedMethod === 'PATCH') return 'chunk';
+  if (url?.includes('/upload/resumable')) return 'create';
+  return 'unknown';
+};
+
+const getRequestStepLabel = (step: UploadRequestStep): string => {
+  switch (step) {
+    case 'create':
+      return 'upload creation';
+    case 'resume':
+      return 'resume check';
+    case 'chunk':
+      return 'chunk upload';
+    default:
+      return 'upload request';
+  }
+};
+
+const getDetailedUploadError = ({
+  status,
+  step,
+  responseText,
+  fallbackMessage,
+  bytesUploaded,
+}: {
+  status: number | null;
+  step: UploadRequestStep;
+  responseText: string | null;
+  fallbackMessage?: string;
+  bytesUploaded: number;
+}): string => {
+  const cleanResponse = responseText?.trim() || null;
+  const stepLabel = getRequestStepLabel(step);
+
+  if (status === 413) {
+    const limitHint = step === 'create' || bytesUploaded === 0
+      ? 'This failed before the file body could stream, which points to a backend/global upload-size limit.'
+      : 'This failed while sending a resumable chunk, which points to a proxy or server request-size limit on chunk uploads.';
+
+    return `413 Payload Too Large during ${stepLabel}. ${cleanResponse || 'Maximum size exceeded.'} ${limitHint}`;
+  }
+
+  if (status) {
+    return `${status} during ${stepLabel}. ${cleanResponse || fallbackMessage || 'Upload failed.'}`;
+  }
+
+  return fallbackMessage || 'Upload failed.';
+};
+
 export interface NetworkState {
   isOnline: boolean;
   retryCount: number;
@@ -39,6 +92,17 @@ export interface NetworkState {
 export interface SpeedDataPoint {
   timestamp: number;
   speed: number;
+}
+
+export type UploadRequestStep = 'create' | 'resume' | 'chunk' | 'unknown';
+
+export interface UploadRequestInfo {
+  step: UploadRequestStep;
+  method: string;
+  url: string;
+  status: number | null;
+  responseText: string | null;
+  updatedAt: number;
 }
 
 export interface UploadItem {
@@ -63,6 +127,9 @@ export interface UploadItem {
   tusUploadUrl?: string;
   autoRetryCount?: number;
   nextRetryAt?: number;
+  lastRequest?: UploadRequestInfo;
+  lastFailureAt?: number;
+  restoredFromStorage?: boolean;
 }
 
 export interface UploadDiagnostics {
@@ -77,6 +144,9 @@ export interface UploadDiagnostics {
   error: string | null;
   createdAt: number;
   status: string;
+  lastRequest: UploadRequestInfo | null;
+  lastFailureAt: number | null;
+  restoredFromStorage: boolean;
 }
 
 interface UploadContextType {
@@ -323,6 +393,79 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  const updateUploadRequestInfo = useCallback((uploadId: string, request: Partial<UploadRequestInfo>) => {
+    const current = uploadsRef.current[uploadId];
+    if (!current) return;
+
+    const nextRequest: UploadRequestInfo = {
+      step: request.step ?? current.lastRequest?.step ?? 'unknown',
+      method: request.method ?? current.lastRequest?.method ?? '',
+      url: request.url ?? current.lastRequest?.url ?? '',
+      status: request.status ?? current.lastRequest?.status ?? null,
+      responseText: request.responseText ?? current.lastRequest?.responseText ?? null,
+      updatedAt: request.updatedAt ?? Date.now(),
+    };
+
+    const next = { ...current, lastRequest: nextRequest };
+    uploadsRef.current = { ...uploadsRef.current, [uploadId]: next };
+    setUploads(prev => ({ ...prev, [uploadId]: next }));
+  }, []);
+
+  const normalizeRestoredUploadState = useCallback((upload: UploadItem): UploadItem => {
+    if (upload.status === 'completed') return upload;
+
+    const hasLocalFile = Boolean(fileRefs.current[upload.id]);
+    const wasActive = upload.status === 'uploading' || upload.status === 'queued';
+
+    if (!hasLocalFile) {
+      return {
+        ...upload,
+        status: 'paused',
+        restoredFromStorage: true,
+        error: wasActive
+          ? 'Upload was restored after a refresh. Reselect the file to continue.'
+          : upload.error,
+      };
+    }
+
+    return { ...upload, restoredFromStorage: true };
+  }, []);
+
+  const loadPersistedUploads = useCallback(async () => {
+    try {
+      const db = await openDB();
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const request = tx.objectStore(STORE_NAME).getAll();
+      const stored = await new Promise<any[]>((resolve, reject) => {
+        request.onsuccess = () => resolve((request.result as any[]) || []);
+        request.onerror = () => reject(request.error);
+      });
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+
+      if (!stored.length) return;
+
+      const restoredEntries: Record<string, UploadItem> = {};
+      stored.forEach((item) => {
+        const restored = normalizeRestoredUploadState(item as UploadItem);
+        restoredEntries[restored.id] = restored;
+        void saveUploadState(restored);
+      });
+
+      uploadsRef.current = { ...uploadsRef.current, ...restoredEntries };
+      setUploads(prev => ({ ...prev, ...restoredEntries }));
+    } catch (error) {
+      console.error('Failed to restore uploads:', error);
+    }
+  }, [normalizeRestoredUploadState, openDB, saveUploadState]);
+
+  useEffect(() => {
+    loadPersistedUploads();
+  }, [loadPersistedUploads]);
+
   // Schedule auto-retry with exponential backoff
   const scheduleAutoRetry = useCallback((uploadId: string) => {
     const upload = uploadsRef.current[uploadId];
@@ -434,6 +577,22 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           const freshToken = await getValidToken();
           if (freshToken) currentToken = freshToken;
           req.setHeader('Authorization', `Bearer ${currentToken}`);
+          updateUploadRequestInfo(uploadId, {
+            step: getRequestStep(req.getMethod?.(), req.getURL?.()),
+            method: req.getMethod?.() || '',
+            url: req.getURL?.() || '',
+            updatedAt: Date.now(),
+          });
+        },
+        onAfterResponse: async (req, res) => {
+          updateUploadRequestInfo(uploadId, {
+            step: getRequestStep(req.getMethod?.(), req.getURL?.()),
+            method: req.getMethod?.() || '',
+            url: req.getURL?.() || '',
+            status: res.getStatus?.() ?? null,
+            responseText: res.getBody?.() || null,
+            updatedAt: Date.now(),
+          });
         },
         onUploadUrlAvailable: async () => {
           state = { ...state, tusUploadUrl: tusUpload.url ?? state.tusUploadUrl };
@@ -444,9 +603,22 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         onError: async (error) => {
           console.error('TUS upload error:', error);
           const status = (error as any)?.originalResponse?.getStatus?.();
+          const requestMethod = (error as any)?.originalRequest?.getMethod?.() || state.lastRequest?.method || '';
+          const requestUrl = (error as any)?.originalRequest?.getURL?.() || state.lastRequest?.url || '';
+          const requestStep = getRequestStep(requestMethod, requestUrl);
+          const responseText = (error as any)?.originalResponse?.getBody?.() || state.lastRequest?.responseText || null;
           incrementRetryCount();
           activeSlots.current.delete(uploadId);
           const errorMessage = error.message?.toLowerCase?.() || '';
+
+          updateUploadRequestInfo(uploadId, {
+            step: requestStep,
+            method: requestMethod,
+            url: requestUrl,
+            status: status ?? null,
+            responseText,
+            updatedAt: Date.now(),
+          });
 
           // 413: file too large — stop ALL retries, surface a clear toast
           if (status === 413 || errorMessage.includes('maximum size exceeded')) {
@@ -458,14 +630,21 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             state = {
               ...state,
               status: 'error',
-              error: 'File exceeds the server upload limit. The backend global storage limit is still lower than this file size.',
+              error: getDetailedUploadError({
+                status: status ?? null,
+                step: requestStep,
+                responseText,
+                fallbackMessage: error.message,
+                bytesUploaded: state.bytesUploaded,
+              }),
               autoRetryCount: MAX_AUTO_RETRIES,
               nextRetryAt: undefined,
+              lastFailureAt: Date.now(),
             };
             uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
             setUploads(prev => ({ ...prev, [uploadId]: state }));
             await saveUploadState(state);
-            toast.error(`${state.fileName} is blocked by the backend upload limit.`);
+            toast.error(`${state.fileName} failed during ${getRequestStepLabel(requestStep)}.`);
             delete tusUploads.current[uploadId];
             delete speedTracking.current[uploadId];
             delete authRetryAttempts.current[uploadId];
@@ -505,7 +684,18 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           }
 
           if (!pausedUploads.current.has(uploadId)) {
-            state = { ...state, status: 'error', error: error.message || 'Upload failed' };
+            state = {
+              ...state,
+              status: 'error',
+              error: getDetailedUploadError({
+                status: status ?? null,
+                step: requestStep,
+                responseText,
+                fallbackMessage: error.message || 'Upload failed',
+                bytesUploaded: state.bytesUploaded,
+              }),
+              lastFailureAt: Date.now(),
+            };
             uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
             setUploads(prev => ({ ...prev, [uploadId]: state }));
             await saveUploadState(state);
@@ -610,7 +800,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       }
       fillSlots();
     }
-  }, [saveUploadState, deleteUploadState, getValidToken, refreshAuthToken, fillSlots, scheduleAutoRetry, recordSpeedHistory]);
+  }, [saveUploadState, deleteUploadState, getValidToken, refreshAuthToken, fillSlots, scheduleAutoRetry, recordSpeedHistory, updateUploadRequestInfo]);
 
   const addFiles = useCallback((files: File[], userId: string, folderPath?: string, folderId?: string) => {
     currentUserId.current = userId;
@@ -767,9 +957,14 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const getActiveCount = useCallback(() => Object.values(uploads).filter(u => u.status === 'uploading').length, [uploads]);
-  const getPendingCount = useCallback(() => Object.values(uploads).filter(u => u.status === 'queued' || u.status === 'uploading' || u.status === 'paused').length, [uploads]);
+  const getPendingCount = useCallback(
+    () => Object.values(uploads).filter(u => u.status === 'queued' || u.status === 'uploading' || (u.status === 'paused' && Boolean(u.file))).length,
+    [uploads]
+  );
   const getTotalProgress = useCallback(() => {
-    const active = Object.values(uploads).filter(u => u.status === 'uploading' || u.status === 'queued' || u.status === 'paused');
+    const active = Object.values(uploads).filter(
+      u => u.status === 'uploading' || u.status === 'queued' || (u.status === 'paused' && Boolean(u.file))
+    );
     if (active.length === 0) return 0;
     return active.reduce((sum, u) => sum + u.progress, 0) / active.length;
   }, [uploads]);
@@ -808,8 +1003,11 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       id: upload.id, fileName: upload.fileName, fileSize: upload.fileSize, storagePath: upload.storagePath,
       totalChunks: upload.totalChunks, uploadedChunks: upload.uploadedChunks,
       lastUploadedChunk: upload.uploadedChunks.length > 0 ? upload.uploadedChunks[upload.uploadedChunks.length - 1] : null,
-      failedAt: upload.status === 'error' ? new Date().toISOString() : null,
+      failedAt: upload.lastFailureAt ? new Date(upload.lastFailureAt).toISOString() : null,
       error: upload.error || null, createdAt: upload.createdAt, status: upload.status,
+      lastRequest: upload.lastRequest || null,
+      lastFailureAt: upload.lastFailureAt ?? null,
+      restoredFromStorage: upload.restoredFromStorage ?? false,
     };
   }, [uploads]);
 
