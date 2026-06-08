@@ -460,7 +460,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('Failed to restore uploads:', error);
     }
-  }, [normalizeRestoredUploadState, openDB]);
+  }, [normalizeRestoredUploadState, openDB, saveUploadState]);
 
   useEffect(() => {
     loadPersistedUploads();
