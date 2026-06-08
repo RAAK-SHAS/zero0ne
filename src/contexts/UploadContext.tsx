@@ -452,6 +452,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       stored.forEach((item) => {
         const restored = normalizeRestoredUploadState(item as UploadItem);
         restoredEntries[restored.id] = restored;
+        void saveUploadState(restored);
       });
 
       uploadsRef.current = { ...uploadsRef.current, ...restoredEntries };
