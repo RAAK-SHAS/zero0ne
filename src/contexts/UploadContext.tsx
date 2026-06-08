@@ -576,6 +576,22 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           const freshToken = await getValidToken();
           if (freshToken) currentToken = freshToken;
           req.setHeader('Authorization', `Bearer ${currentToken}`);
+          updateUploadRequestInfo(uploadId, {
+            step: getRequestStep(req.getMethod?.(), req.getURL?.()),
+            method: req.getMethod?.() || '',
+            url: req.getURL?.() || '',
+            updatedAt: Date.now(),
+          });
+        },
+        onAfterResponse: async (req, res) => {
+          updateUploadRequestInfo(uploadId, {
+            step: getRequestStep(req.getMethod?.(), req.getURL?.()),
+            method: req.getMethod?.() || '',
+            url: req.getURL?.() || '',
+            status: res.getStatus?.() ?? null,
+            responseText: res.getBody?.() || null,
+            updatedAt: Date.now(),
+          });
         },
         onUploadUrlAvailable: async () => {
           state = { ...state, tusUploadUrl: tusUpload.url ?? state.tusUploadUrl };
@@ -586,9 +602,22 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         onError: async (error) => {
           console.error('TUS upload error:', error);
           const status = (error as any)?.originalResponse?.getStatus?.();
+          const requestMethod = (error as any)?.originalRequest?.getMethod?.() || state.lastRequest?.method || '';
+          const requestUrl = (error as any)?.originalRequest?.getURL?.() || state.lastRequest?.url || '';
+          const requestStep = getRequestStep(requestMethod, requestUrl);
+          const responseText = (error as any)?.originalResponse?.getBody?.() || state.lastRequest?.responseText || null;
           incrementRetryCount();
           activeSlots.current.delete(uploadId);
           const errorMessage = error.message?.toLowerCase?.() || '';
+
+          updateUploadRequestInfo(uploadId, {
+            step: requestStep,
+            method: requestMethod,
+            url: requestUrl,
+            status: status ?? null,
+            responseText,
+            updatedAt: Date.now(),
+          });
 
           // 413: file too large — stop ALL retries, surface a clear toast
           if (status === 413 || errorMessage.includes('maximum size exceeded')) {
@@ -600,14 +629,21 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             state = {
               ...state,
               status: 'error',
-              error: 'File exceeds the server upload limit. The backend global storage limit is still lower than this file size.',
+              error: getDetailedUploadError({
+                status: status ?? null,
+                step: requestStep,
+                responseText,
+                fallbackMessage: error.message,
+                bytesUploaded: state.bytesUploaded,
+              }),
               autoRetryCount: MAX_AUTO_RETRIES,
               nextRetryAt: undefined,
+              lastFailureAt: Date.now(),
             };
             uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
             setUploads(prev => ({ ...prev, [uploadId]: state }));
             await saveUploadState(state);
-            toast.error(`${state.fileName} is blocked by the backend upload limit.`);
+            toast.error(`${state.fileName} failed during ${getRequestStepLabel(requestStep)}.`);
             delete tusUploads.current[uploadId];
             delete speedTracking.current[uploadId];
             delete authRetryAttempts.current[uploadId];
@@ -647,7 +683,18 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           }
 
           if (!pausedUploads.current.has(uploadId)) {
-            state = { ...state, status: 'error', error: error.message || 'Upload failed' };
+            state = {
+              ...state,
+              status: 'error',
+              error: getDetailedUploadError({
+                status: status ?? null,
+                step: requestStep,
+                responseText,
+                fallbackMessage: error.message || 'Upload failed',
+                bytesUploaded: state.bytesUploaded,
+              }),
+              lastFailureAt: Date.now(),
+            };
             uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
             setUploads(prev => ({ ...prev, [uploadId]: state }));
             await saveUploadState(state);
@@ -752,7 +799,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       }
       fillSlots();
     }
-  }, [saveUploadState, deleteUploadState, getValidToken, refreshAuthToken, fillSlots, scheduleAutoRetry, recordSpeedHistory]);
+  }, [saveUploadState, deleteUploadState, getValidToken, refreshAuthToken, fillSlots, scheduleAutoRetry, recordSpeedHistory, updateUploadRequestInfo]);
 
   const addFiles = useCallback((files: File[], userId: string, folderPath?: string, folderId?: string) => {
     currentUserId.current = userId;
