@@ -393,6 +393,74 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  const updateUploadRequestInfo = useCallback((uploadId: string, request: Partial<UploadRequestInfo>) => {
+    const current = uploadsRef.current[uploadId];
+    if (!current) return;
+
+    const nextRequest: UploadRequestInfo = {
+      step: request.step ?? current.lastRequest?.step ?? 'unknown',
+      method: request.method ?? current.lastRequest?.method ?? '',
+      url: request.url ?? current.lastRequest?.url ?? '',
+      status: request.status ?? current.lastRequest?.status ?? null,
+      responseText: request.responseText ?? current.lastRequest?.responseText ?? null,
+      updatedAt: request.updatedAt ?? Date.now(),
+    };
+
+    const next = { ...current, lastRequest: nextRequest };
+    uploadsRef.current = { ...uploadsRef.current, [uploadId]: next };
+    setUploads(prev => ({ ...prev, [uploadId]: next }));
+  }, []);
+
+  const normalizeRestoredUploadState = useCallback((upload: UploadItem): UploadItem => {
+    if (upload.status === 'completed') return upload;
+
+    const hasLocalFile = Boolean(fileRefs.current[upload.id]);
+    const wasActive = upload.status === 'uploading' || upload.status === 'queued';
+
+    if (!hasLocalFile) {
+      return {
+        ...upload,
+        status: 'paused',
+        restoredFromStorage: true,
+        error: wasActive
+          ? 'Upload was restored after a refresh. Reselect the file to continue.'
+          : upload.error,
+      };
+    }
+
+    return { ...upload, restoredFromStorage: true };
+  }, []);
+
+  const loadPersistedUploads = useCallback(async () => {
+    try {
+      const db = await openDB();
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const request = tx.objectStore(STORE_NAME).getAll();
+      const stored = await new Promise<any[]>((resolve, reject) => {
+        request.onsuccess = () => resolve((request.result as any[]) || []);
+        request.onerror = () => reject(request.error);
+      });
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+
+      if (!stored.length) return;
+
+      const restoredEntries: Record<string, UploadItem> = {};
+      stored.forEach((item) => {
+        const restored = normalizeRestoredUploadState(item as UploadItem);
+        restoredEntries[restored.id] = restored;
+      });
+
+      uploadsRef.current = { ...uploadsRef.current, ...restoredEntries };
+      setUploads(prev => ({ ...prev, ...restoredEntries }));
+    } catch (error) {
+      console.error('Failed to restore uploads:', error);
+    }
+  }, [normalizeRestoredUploadState, openDB]);
+
   // Schedule auto-retry with exponential backoff
   const scheduleAutoRetry = useCallback((uploadId: string) => {
     const upload = uploadsRef.current[uploadId];
