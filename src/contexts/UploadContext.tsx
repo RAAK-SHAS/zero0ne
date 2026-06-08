@@ -956,9 +956,14 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const getActiveCount = useCallback(() => Object.values(uploads).filter(u => u.status === 'uploading').length, [uploads]);
-  const getPendingCount = useCallback(() => Object.values(uploads).filter(u => u.status === 'queued' || u.status === 'uploading' || u.status === 'paused').length, [uploads]);
+  const getPendingCount = useCallback(
+    () => Object.values(uploads).filter(u => u.status === 'queued' || u.status === 'uploading' || (u.status === 'paused' && Boolean(u.file))).length,
+    [uploads]
+  );
   const getTotalProgress = useCallback(() => {
-    const active = Object.values(uploads).filter(u => u.status === 'uploading' || u.status === 'queued' || u.status === 'paused');
+    const active = Object.values(uploads).filter(
+      u => u.status === 'uploading' || u.status === 'queued' || (u.status === 'paused' && Boolean(u.file))
+    );
     if (active.length === 0) return 0;
     return active.reduce((sum, u) => sum + u.progress, 0) / active.length;
   }, [uploads]);
