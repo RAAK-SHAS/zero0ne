@@ -31,7 +31,8 @@ export const UploadSummary = memo(({ onOpenQueue }: UploadSummaryProps) => {
   const queuedUploads = uploadList.filter(u => u.status === 'queued');
   const completedUploads = uploadList.filter(u => u.status === 'completed');
   const failedUploads = uploadList.filter(u => u.status === 'error');
-  const pausedUploads = uploadList.filter(u => u.status === 'paused');
+  const pausedUploads = uploadList.filter(u => u.status === 'paused' && u.file);
+  const pausedAwaitingReselect = uploadList.filter(u => u.status === 'paused' && !u.file);
 
   const totalInProgress = activeUploads.length + queuedUploads.length + pausedUploads.length;
   const hasActivity = uploadList.length > 0;
@@ -96,7 +97,7 @@ export const UploadSummary = memo(({ onOpenQueue }: UploadSummaryProps) => {
               <Upload className="h-4 w-4" />
             )}
             <span className="font-medium text-sm">
-              {isUploading ? 'Uploading...' : allDone ? (failedUploads.length > 0 ? 'Uploads finished with errors' : 'Upload Complete') : 'Uploads'}
+              {isUploading ? 'Uploading...' : allDone ? (failedUploads.length > 0 ? 'Uploads finished with errors' : 'Upload Complete') : pausedAwaitingReselect.length > 0 ? 'Uploads need file reselect' : 'Uploads'}
             </span>
           </div>
           <div className="flex items-center gap-1">
