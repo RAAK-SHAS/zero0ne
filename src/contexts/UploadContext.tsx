@@ -226,6 +226,10 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     maxConcurrentRef.current = maxConcurrent;
   }, [maxConcurrent]);
 
+  useEffect(() => {
+    loadPersistedUploads();
+  }, [loadPersistedUploads]);
+
   // Keep-alive to prevent browser throttling uploads in background tabs
   useEffect(() => {
     keepAliveInterval.current = setInterval(() => {
