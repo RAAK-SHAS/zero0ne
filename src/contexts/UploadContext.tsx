@@ -41,6 +41,17 @@ export interface SpeedDataPoint {
   speed: number;
 }
 
+export type UploadRequestStep = 'create' | 'resume' | 'chunk' | 'unknown';
+
+export interface UploadRequestInfo {
+  step: UploadRequestStep;
+  method: string;
+  url: string;
+  status: number | null;
+  responseText: string | null;
+  updatedAt: number;
+}
+
 export interface UploadItem {
   id: string;
   fileName: string;
@@ -63,6 +74,9 @@ export interface UploadItem {
   tusUploadUrl?: string;
   autoRetryCount?: number;
   nextRetryAt?: number;
+  lastRequest?: UploadRequestInfo;
+  lastFailureAt?: number;
+  restoredFromStorage?: boolean;
 }
 
 export interface UploadDiagnostics {
@@ -77,6 +91,9 @@ export interface UploadDiagnostics {
   error: string | null;
   createdAt: number;
   status: string;
+  lastRequest: UploadRequestInfo | null;
+  lastFailureAt: number | null;
+  restoredFromStorage: boolean;
 }
 
 interface UploadContextType {
