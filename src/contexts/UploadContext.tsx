@@ -226,10 +226,6 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     maxConcurrentRef.current = maxConcurrent;
   }, [maxConcurrent]);
 
-  useEffect(() => {
-    loadPersistedUploads();
-  }, [loadPersistedUploads]);
-
   // Keep-alive to prevent browser throttling uploads in background tabs
   useEffect(() => {
     keepAliveInterval.current = setInterval(() => {
@@ -464,6 +460,10 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       console.error('Failed to restore uploads:', error);
     }
   }, [normalizeRestoredUploadState, openDB]);
+
+  useEffect(() => {
+    loadPersistedUploads();
+  }, [loadPersistedUploads]);
 
   // Schedule auto-retry with exponential backoff
   const scheduleAutoRetry = useCallback((uploadId: string) => {
