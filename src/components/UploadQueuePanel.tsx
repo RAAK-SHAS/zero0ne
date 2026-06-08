@@ -284,13 +284,31 @@ export const UploadQueuePanel = ({ isOpen, onClose, onReselectFile }: UploadQueu
                           </Button>
                         </div>
                         <div className="space-y-0.5 font-mono text-muted-foreground">
-                          <p>ID: {upload.id.slice(0, 20)}...</p>
-                          <p>Size: {formatBytes(upload.fileSize)}</p>
-                          <p>Chunks: {upload.uploadedChunks.length}/{upload.totalChunks}</p>
-                          <p>Last chunk: {upload.uploadedChunks.length > 0 ? upload.uploadedChunks[upload.uploadedChunks.length - 1] : 'N/A'}</p>
-                          <p>Path: {upload.storagePath}</p>
-                          <p>Auto-retries: {upload.autoRetryCount || 0}/{5}</p>
-                          {upload.error && <p className="text-destructive">Error: {upload.error}</p>}
+                          {(() => {
+                            const diagnostics = getUploadDiagnostics(upload.id);
+                            return (
+                              <>
+                                <p>ID: {upload.id.slice(0, 20)}...</p>
+                                <p>Size: {formatBytes(upload.fileSize)}</p>
+                                <p>Chunks: {upload.uploadedChunks.length}/{upload.totalChunks}</p>
+                                <p>Last chunk: {upload.uploadedChunks.length > 0 ? upload.uploadedChunks[upload.uploadedChunks.length - 1] : 'N/A'}</p>
+                                <p>Path: {upload.storagePath}</p>
+                                <p>Auto-retries: {upload.autoRetryCount || 0}/{5}</p>
+                                {diagnostics?.restoredFromStorage && <p>Restored: yes</p>}
+                                {diagnostics?.lastFailureAt && <p>Failed at: {new Date(diagnostics.lastFailureAt).toLocaleString()}</p>}
+                                {diagnostics?.lastRequest && (
+                                  <>
+                                    <p>Step: {diagnostics.lastRequest.step}</p>
+                                    <p>Method: {diagnostics.lastRequest.method || 'N/A'}</p>
+                                    <p>Status: {diagnostics.lastRequest.status ?? 'N/A'}</p>
+                                    <p>URL: {diagnostics.lastRequest.url || 'N/A'}</p>
+                                    <p className="break-all">Body: {diagnostics.lastRequest.responseText || 'N/A'}</p>
+                                  </>
+                                )}
+                                {upload.error && <p className="text-destructive break-all">Error: {upload.error}</p>}
+                              </>
+                            );
+                          })()}
                         </div>
                         {upload.status === 'error' && upload.file && (
                           <Button variant="outline" size="sm" className="w-full mt-2 text-xs" onClick={() => retryUpload(upload.id)}>
