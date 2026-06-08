@@ -29,6 +29,59 @@ const getRetryDelay = (attempt: number): number => {
   return Math.min(2000 * Math.pow(2, attempt), 60000);
 };
 
+const getRequestStep = (method?: string, url?: string): UploadRequestStep => {
+  const normalizedMethod = method?.toUpperCase();
+  if (normalizedMethod === 'POST') return 'create';
+  if (normalizedMethod === 'HEAD') return 'resume';
+  if (normalizedMethod === 'PATCH') return 'chunk';
+  if (url?.includes('/upload/resumable')) return 'create';
+  return 'unknown';
+};
+
+const getRequestStepLabel = (step: UploadRequestStep): string => {
+  switch (step) {
+    case 'create':
+      return 'upload creation';
+    case 'resume':
+      return 'resume check';
+    case 'chunk':
+      return 'chunk upload';
+    default:
+      return 'upload request';
+  }
+};
+
+const getDetailedUploadError = ({
+  status,
+  step,
+  responseText,
+  fallbackMessage,
+  bytesUploaded,
+}: {
+  status: number | null;
+  step: UploadRequestStep;
+  responseText: string | null;
+  fallbackMessage?: string;
+  bytesUploaded: number;
+}): string => {
+  const cleanResponse = responseText?.trim() || null;
+  const stepLabel = getRequestStepLabel(step);
+
+  if (status === 413) {
+    const limitHint = step === 'create' || bytesUploaded === 0
+      ? 'This failed before the file body could stream, which points to a backend/global upload-size limit.'
+      : 'This failed while sending a resumable chunk, which points to a proxy or server request-size limit on chunk uploads.';
+
+    return `413 Payload Too Large during ${stepLabel}. ${cleanResponse || 'Maximum size exceeded.'} ${limitHint}`;
+  }
+
+  if (status) {
+    return `${status} during ${stepLabel}. ${cleanResponse || fallbackMessage || 'Upload failed.'}`;
+  }
+
+  return fallbackMessage || 'Upload failed.';
+};
+
 export interface NetworkState {
   isOnline: boolean;
   retryCount: number;
