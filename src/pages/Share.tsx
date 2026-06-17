@@ -30,6 +30,11 @@ const Share = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!token || token.trim().length < 10) {
+      setError('invalid');
+      setLoading(false);
+      return;
+    }
     loadFile();
   }, [token]);
 
