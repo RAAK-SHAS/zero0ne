@@ -168,24 +168,42 @@ export const UploadSummary = memo(({ onOpenQueue }: UploadSummaryProps) => {
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-1 space-y-1">
                   <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
-                    {failedUploads.map(upload => (
-                      <div key={upload.id} className="flex items-center justify-between rounded bg-destructive/5 p-2 text-xs">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">{upload.fileName}</p>
-                          <p className="truncate text-destructive/70">{upload.error || 'Upload failed'}</p>
+                    {failedUploads.map(upload => {
+                      const req = upload.lastRequest;
+                      const isServerLimit = req?.status === 413 || /maximum size exceeded|exceeds the server/i.test(upload.error || '');
+                      return (
+                        <div key={upload.id} className="rounded bg-destructive/5 p-2 text-xs space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-medium break-all flex-1">{upload.fileName}</p>
+                            {upload.file && !isServerLimit && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 flex-shrink-0"
+                                onClick={() => retryUpload(upload.id)}
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                          <p className="text-destructive/80 break-words">{upload.error || 'Upload failed'}</p>
+                          {req && (
+                            <div className="text-[10px] text-muted-foreground font-mono space-y-0.5 pt-1 border-t border-destructive/10">
+                              <p>Step: {req.step} · {req.method} · HTTP {req.status ?? 'n/a'}</p>
+                              <p>Bytes sent: {formatBytes(upload.bytesUploaded)} / {formatBytes(upload.fileSize)}</p>
+                              {req.responseText && (
+                                <p className="break-all">Server: {req.responseText.slice(0, 300)}</p>
+                              )}
+                            </div>
+                          )}
+                          {isServerLimit && (
+                            <p className="text-[10px] text-yellow-600 pt-1">
+                              Server-side upload limit. Raise the bucket / global storage file-size limit in Lovable Cloud → Storage settings; retrying will not help until that's done.
+                            </p>
+                          )}
                         </div>
-                        {upload.file && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="ml-2 h-6 w-6"
-                            onClick={() => retryUpload(upload.id)}
-                          >
-                            <RefreshCw className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   
                   {/* Retry all button */}
