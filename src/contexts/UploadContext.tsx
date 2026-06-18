@@ -620,7 +620,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             updatedAt: Date.now(),
           });
 
-          // 413: file too large — stop ALL retries, surface a clear toast
+          // 413: file too large — stop ALL retries and show it only in the upload panel
           if (status === 413 || errorMessage.includes('maximum size exceeded')) {
             if (autoRetryTimers.current[uploadId]) {
               clearTimeout(autoRetryTimers.current[uploadId]);
@@ -644,7 +644,6 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
             setUploads(prev => ({ ...prev, [uploadId]: state }));
             await saveUploadState(state);
-            toast.error(`${state.fileName} failed during ${getRequestStepLabel(requestStep)}.`);
             delete tusUploads.current[uploadId];
             delete speedTracking.current[uploadId];
             delete authRetryAttempts.current[uploadId];
