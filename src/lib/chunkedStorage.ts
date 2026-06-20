@@ -1,0 +1,118 @@
+import { supabase } from '@/integrations/supabase/client';
+
+export const CHUNKED_UPLOAD_THRESHOLD_BYTES = 512 * 1024 * 1024;
+export const MANUAL_CHUNK_SIZE_BYTES = 8 * 1024 * 1024;
+const STORAGE_BUCKET = 'user-files';
+
+export interface StoredFileMetadata {
+  storage_path: string;
+  size_bytes: number;
+  mime_type?: string | null;
+  upload_strategy?: string | null;
+  chunk_size_bytes?: number | null;
+  chunk_count?: number | null;
+  chunk_paths?: string[] | null;
+}
+
+export const shouldUseChunkedStorage = (fileSize: number) => fileSize >= CHUNKED_UPLOAD_THRESHOLD_BYTES;
+
+export const isChunkedStoredFile = (file: Partial<StoredFileMetadata>) =>
+  file.upload_strategy === 'chunked' && Array.isArray(file.chunk_paths) && file.chunk_paths.length > 0;
+
+export const buildChunkPath = (storagePath: string, index: number) =>
+  `${storagePath}.parts/${String(index).padStart(6, '0')}.part`;
+
+export const getStoragePathsForRemoval = (file: Partial<StoredFileMetadata>) => {
+  if (isChunkedStoredFile(file)) return file.chunk_paths as string[];
+  return file.storage_path ? [file.storage_path] : [];
+};
+
+export const removeStoragePaths = async (paths: string[]) => {
+  for (let i = 0; i < paths.length; i += 100) {
+    const batch = paths.slice(i, i + 100);
+    if (batch.length > 0) await supabase.storage.from(STORAGE_BUCKET).remove(batch);
+  }
+};
+
+export const downloadStoredFileBlob = async (
+  file: StoredFileMetadata,
+  options?: {
+    signal?: AbortSignal;
+    onProgress?: (bytesDownloaded: number) => void;
+  }
+) => {
+  if (isChunkedStoredFile(file)) {
+    const chunks: Blob[] = [];
+    let downloaded = 0;
+
+    for (const path of file.chunk_paths || []) {
+      if (options?.signal?.aborted) throw new DOMException('Download aborted', 'AbortError');
+
+      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path);
+      if (error || !data) throw error || new Error('Failed to download file chunk');
+
+      chunks.push(data);
+      downloaded += data.size;
+      options?.onProgress?.(Math.min(downloaded, file.size_bytes));
+    }
+
+    return new Blob(chunks, { type: file.mime_type || 'application/octet-stream' });
+  }
+
+  const { data: signedUrl, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(file.storage_path, 3600);
+  if (error || !signedUrl) throw error || new Error('Failed to create download link');
+
+  const response = await fetch(signedUrl.signedUrl, { signal: options?.signal });
+  if (!response.ok) throw new Error('Download failed');
+
+  const blob = await response.blob();
+  options?.onProgress?.(file.size_bytes);
+  return blob;
+};
+
+export const downloadChunkedStoredFileToDisk = async (
+  file: StoredFileMetadata,
+  fileName: string,
+  options?: {
+    signal?: AbortSignal;
+    onProgress?: (bytesDownloaded: number) => void;
+    saveHandle?: Promise<any> | any;
+  }
+) => {
+  if (!isChunkedStoredFile(file) || !(window as any).showSaveFilePicker) return false;
+
+  let handle: any;
+  if (options?.saveHandle) {
+    handle = await options.saveHandle;
+  } else {
+    try {
+      handle = await (window as any).showSaveFilePicker({ suggestedName: fileName });
+    } catch (error: any) {
+      if (error?.name === 'AbortError') throw error;
+      return false;
+    }
+  }
+  if (!handle) return false;
+  const writable = await handle.createWritable();
+  let downloaded = 0;
+
+  try {
+    for (const path of file.chunk_paths || []) {
+      if (options?.signal?.aborted) throw new DOMException('Download aborted', 'AbortError');
+
+      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path);
+      if (error || !data) throw error || new Error('Failed to download file chunk');
+
+      await writable.write(data);
+      downloaded += data.size;
+      options?.onProgress?.(Math.min(downloaded, file.size_bytes));
+    }
+    await writable.close();
+    return true;
+  } catch (error) {
+    await writable.abort();
+    throw error;
+  }
+};

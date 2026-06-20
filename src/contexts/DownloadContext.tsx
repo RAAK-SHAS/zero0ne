@@ -1,8 +1,21 @@
 import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import { downloadChunkedStoredFileToDisk, downloadStoredFileBlob, StoredFileMetadata } from '@/lib/chunkedStorage';
+
+type DownloadFileRef = {
+  id?: string;
+  name: string;
+  path: string;
+  size: number;
+  mimeType?: string | null;
+  uploadStrategy?: string | null;
+  chunkSizeBytes?: number | null;
+  chunkCount?: number | null;
+  chunkPaths?: string[] | null;
+  saveHandle?: Promise<any> | any;
+};
 
 export interface DownloadItem {
   id: string;
@@ -22,8 +35,8 @@ export interface DownloadItem {
 interface DownloadContextType {
   downloads: Record<string, DownloadItem>;
   isDownloading: boolean;
-  downloadFile: (fileId: string, fileName: string, storagePath: string, size: number) => void;
-  downloadMultipleAsZip: (files: { id: string; name: string; path: string; size: number }[], zipName: string) => void;
+  downloadFile: (fileId: string, fileName: string, storagePath: string, size: number, metadata?: Partial<DownloadFileRef>) => void;
+  downloadMultipleAsZip: (files: DownloadFileRef[], zipName: string) => void;
   pauseDownload: (id: string) => void;
   resumeDownload: (id: string) => void;
   cancelDownload: (id: string) => void;
@@ -49,7 +62,17 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
   const pausedDownloads = useRef<Set<string>>(new Set());
   const speedTracking = useRef<Record<string, { bytes: number; timestamp: number }[]>>({});
   const downloadQueue = useRef<string[]>([]);
-  const downloadData = useRef<Record<string, { files: { name: string; path: string; size: number }[]; zipName?: string }>>({});
+  const downloadData = useRef<Record<string, { files: DownloadFileRef[]; zipName?: string }>>({});
+
+  const toStoredFileMetadata = (file: DownloadFileRef): StoredFileMetadata => ({
+    storage_path: file.path,
+    size_bytes: file.size,
+    mime_type: file.mimeType,
+    upload_strategy: file.uploadStrategy,
+    chunk_size_bytes: file.chunkSizeBytes,
+    chunk_count: file.chunkCount,
+    chunk_paths: file.chunkPaths,
+  });
 
   const calculateSpeed = (downloadId: string, newBytes: number): number => {
     const now = Date.now();
@@ -111,11 +134,9 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
             return;
           }
 
-          const { data: blob, error } = await supabase.storage
-            .from('user-files')
-            .download(file.path);
-
-          if (error) throw error;
+          const blob = await downloadStoredFileBlob(toStoredFileMetadata(file), {
+            signal: abortControllers.current[downloadId].signal,
+          });
 
           zip.file(file.name, blob);
           totalDownloaded += file.size;
@@ -136,19 +157,40 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
         toast.success('Download complete!');
       } else {
         // Single file download
-        const { data: signedUrl, error: urlError } = await supabase.storage
-          .from('user-files')
-          .createSignedUrl(data?.files?.[0]?.path || '', 3600);
-
-        if (urlError) throw urlError;
-
-        const response = await fetch(signedUrl.signedUrl, {
-          signal: abortControllers.current[downloadId].signal
+        const fileRef = data?.files?.[0];
+        if (!fileRef) throw new Error('Missing download file');
+        const storedMetadata = toStoredFileMetadata(fileRef);
+        const streamedToDisk = await downloadChunkedStoredFileToDisk(storedMetadata, download.fileName, {
+          signal: abortControllers.current[downloadId].signal,
+          saveHandle: fileRef.saveHandle,
+          onProgress: (bytesDownloaded) => {
+            state.bytesDownloaded = bytesDownloaded;
+            state.progress = Math.round((bytesDownloaded / download.fileSize) * 100);
+            state.speed = calculateSpeed(downloadId, bytesDownloaded);
+            state.eta = state.speed > 0 ? (download.fileSize - bytesDownloaded) / state.speed : 0;
+            setDownloads(prev => ({ ...prev, [downloadId]: { ...state } }));
+          },
         });
 
-        if (!response.ok) throw new Error('Download failed');
+        if (streamedToDisk) {
+          state.progress = 100;
+          state.status = 'completed';
+          state.bytesDownloaded = download.fileSize;
+          toast.success(`${download.fileName} downloaded!`);
+          setDownloads(prev => ({ ...prev, [downloadId]: state }));
+          return;
+        }
 
-        const blob = await response.blob();
+        const blob = await downloadStoredFileBlob(storedMetadata, {
+          signal: abortControllers.current[downloadId].signal,
+          onProgress: (bytesDownloaded) => {
+            state.bytesDownloaded = bytesDownloaded;
+            state.progress = Math.round((bytesDownloaded / download.fileSize) * 100);
+            state.speed = calculateSpeed(downloadId, bytesDownloaded);
+            state.eta = state.speed > 0 ? (download.fileSize - bytesDownloaded) / state.speed : 0;
+            setDownloads(prev => ({ ...prev, [downloadId]: { ...state } }));
+          },
+        });
         saveAs(blob, download.fileName);
         
         state.progress = 100;
@@ -173,11 +215,17 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [downloads]);
 
-  const downloadFile = useCallback((fileId: string, fileName: string, storagePath: string, size: number) => {
+  const downloadFile = useCallback((fileId: string, fileName: string, storagePath: string, size: number, metadata?: Partial<DownloadFileRef>) => {
     const downloadId = `single_${fileId}_${Date.now()}`;
+    const saveHandle = metadata?.uploadStrategy === 'chunked' && (window as any).showSaveFilePicker
+      ? (window as any).showSaveFilePicker({ suggestedName: fileName }).catch((error: any) => {
+          if (error?.name !== 'AbortError') console.error('Save picker failed:', error);
+          return null;
+        })
+      : undefined;
     
     downloadData.current[downloadId] = {
-      files: [{ name: fileName, path: storagePath, size }]
+      files: [{ name: fileName, path: storagePath, size, ...metadata, saveHandle }]
     };
 
     const newDownload: DownloadItem = {
@@ -202,7 +250,7 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
   }, [isDownloading, processNextInQueue]);
 
   const downloadMultipleAsZip = useCallback((
-    files: { id: string; name: string; path: string; size: number }[],
+    files: DownloadFileRef[],
     zipName: string
   ) => {
     const downloadId = `zip_${Date.now()}`;

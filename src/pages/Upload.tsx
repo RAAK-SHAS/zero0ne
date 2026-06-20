@@ -91,7 +91,7 @@ const Upload = () => {
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold">Upload Files</h1>
             <p className="text-muted-foreground">
-              Resumable uploads • Pause & resume anytime • Up to 100TB
+              Resumable uploads • Large files stored in parts • Up to 64GB
             </p>
             <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">

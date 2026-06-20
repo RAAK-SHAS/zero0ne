@@ -44,6 +44,7 @@ import { SystemLog, useSystemLog } from '@/components/SystemLog';
 import { TerminalPanel } from '@/components/TerminalPanel';
 import { FileGridSkeleton } from '@/components/FileGridSkeleton';
 import { EmptyState } from '@/components/EmptyState';
+import { downloadStoredFileBlob } from '@/lib/chunkedStorage';
 import { useTerminal } from '@/hooks/useTerminal';
 import { toast } from 'sonner';
 import { FolderLockDialog } from '@/components/FolderLockDialog';
@@ -88,6 +89,10 @@ interface FileItem {
   folder_id?: string | null;
   user_id: string;
   deleted_at: string | null;
+  upload_strategy?: string;
+  chunk_size_bytes?: number | null;
+  chunk_count?: number | null;
+  chunk_paths?: string[] | null;
 }
 
 const Dashboard = () => {
@@ -135,7 +140,7 @@ const Dashboard = () => {
   const [editType, setEditType] = useState<'pdf' | 'video' | 'audio' | 'image' | 'markdown' | null>(null);
   
   const { addFiles, isUploading, uploads, resumeUpload, cancelUpload, getPausedUploadsNeedingFile } = useUploadManager();
-  const { downloadFile, downloadMultipleAsZip } = useDownloadManager();
+  const { downloadFile } = useDownloadManager();
   const { toggleFavorite } = useFavorites();
   const { logActivity } = useActivityLog(user?.id);
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
@@ -256,16 +261,15 @@ const Dashboard = () => {
     try {
       const file = files.find(f => f.id === fileId);
       if (!file) return;
-
-      const { data, error } = await supabase.storage
-        .from('user-files')
-        .createSignedUrl(file.storage_path, 60);
-
-      if (error) throw error;
-      
-      window.open(data.signedUrl, '_blank');
+      downloadFile(file.id, file.name, file.storage_path, file.size_bytes, {
+        mimeType: file.mime_type,
+        uploadStrategy: file.upload_strategy,
+        chunkSizeBytes: file.chunk_size_bytes,
+        chunkCount: file.chunk_count,
+        chunkPaths: file.chunk_paths,
+      });
       logActivity('download', 'file', fileId, file.name);
-      toast.success('Opening file...');
+      toast.success('Download queued');
     } catch (error: any) {
       toast.error(error.message || 'Failed to download file');
     }
@@ -275,6 +279,11 @@ const Dashboard = () => {
     try {
       const file = files.find(f => f.id === fileId);
       if (!file) return;
+
+      if (file.upload_strategy === 'chunked') {
+        toast.info('Preview is disabled for very large chunked files. Please download the file instead.');
+        return;
+      }
 
       const { data, error } = await supabase.storage
         .from('user-files')
@@ -463,13 +472,16 @@ const Dashboard = () => {
     try {
       const zip = new JSZip();
       for (const file of sel) {
-        const { data: signed, error } = await supabase.storage
-          .from('user-files')
-          .createSignedUrl(file.storage_path, 120);
-        if (error || !signed) continue;
-        const res = await fetch(signed.signedUrl);
-        if (!res.ok) continue;
-        zip.file(file.name, await res.blob());
+        const blob = await downloadStoredFileBlob({
+          storage_path: file.storage_path,
+          size_bytes: file.size_bytes,
+          mime_type: file.mime_type,
+          upload_strategy: file.upload_strategy,
+          chunk_size_bytes: file.chunk_size_bytes,
+          chunk_count: file.chunk_count,
+          chunk_paths: file.chunk_paths,
+        });
+        zip.file(file.name, blob);
       }
       const blob = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(blob);
@@ -549,6 +561,11 @@ const Dashboard = () => {
   const handleEdit = async (fileId: string) => {
     const file = files.find(f => f.id === fileId);
     if (!file) return;
+
+    if (file.upload_strategy === 'chunked') {
+      toast.info('Very large chunked files can be downloaded, but editing/preview is disabled for now.');
+      return;
+    }
 
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     const mime = file.mime_type || '';

@@ -19,6 +19,7 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { MobileNav } from '@/components/MobileNav';
 import { FileIcon } from '@/components/FileIcon';
 import { formatBytes } from '@/lib/utils';
+import { getStoragePathsForRemoval, removeStoragePaths } from '@/lib/chunkedStorage';
 import { format } from 'date-fns';
 
 interface FileItem {
@@ -29,6 +30,8 @@ interface FileItem {
   storage_path: string;
   created_at: string;
   deleted_at: string;
+  upload_strategy?: string;
+  chunk_paths?: string[] | null;
 }
 
 const Trash = () => {
@@ -82,8 +85,7 @@ const Trash = () => {
     try {
       const file = files.find(f => f.id === deleteFileId);
       if (!file) return;
-      const { error: storageError } = await supabase.storage.from('user-files').remove([file.storage_path]);
-      if (storageError) throw storageError;
+      await removeStoragePaths(getStoragePathsForRemoval(file));
       const { error: dbError } = await supabase.from('files').delete().eq('id', deleteFileId);
       if (dbError) throw dbError;
       toast.success('File permanently deleted');
