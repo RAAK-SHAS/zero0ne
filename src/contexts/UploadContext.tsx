@@ -640,6 +640,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       fillSlots();
       return;
     }
+    if (upload.userId) currentUserId.current = upload.userId;
 
     let state: UploadItem = { ...upload, status: 'uploading' };
     uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
