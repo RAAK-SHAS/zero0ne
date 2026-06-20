@@ -372,7 +372,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     return `${userId}_${file.name}_${file.size}_${file.lastModified}`;
   };
 
-  const calculateSpeed = (uploadId: string, newBytes: number): number => {
+  const calculateSpeed = useCallback((uploadId: string, newBytes: number): number => {
     const now = Date.now();
     if (!speedTracking.current[uploadId]) speedTracking.current[uploadId] = [];
     speedTracking.current[uploadId].push({ bytes: newBytes, timestamp: now });
@@ -382,7 +382,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     const timeDiff = (data[data.length - 1].timestamp - data[0].timestamp) / 1000;
     const bytesDiff = data[data.length - 1].bytes - data[0].bytes;
     return timeDiff > 0 ? bytesDiff / timeDiff : 0;
-  };
+  }, []);
 
   const uploadChunkWithRetry = useCallback(async (chunk: Blob, path: string, retries = 0): Promise<void> => {
     const { error } = await supabase.storage.from('user-files').upload(path, chunk, {
@@ -629,7 +629,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       activeSlots.current.delete(uploadId);
       fillSlots();
     }
-  }, [deleteUploadState, fillSlots, saveUploadState, scheduleAutoRetry, uploadChunkWithRetry]);
+  }, [calculateSpeed, deleteUploadState, fillSlots, saveUploadState, scheduleAutoRetry, uploadChunkWithRetry]);
 
   const startUpload = useCallback(async (uploadId: string) => {
     const upload = uploadsRef.current[uploadId];
