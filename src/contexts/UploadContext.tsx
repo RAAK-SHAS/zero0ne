@@ -11,7 +11,7 @@ const STORE_NAME = 'uploads';
 export const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
 // Max upload size (default 50GB) — overridable via env
 export const MAX_FILE_SIZE_BYTES = Number(
-  (import.meta as any).env?.VITE_MAX_FILE_SIZE_BYTES ?? 68719476736
+  import.meta.env?.VITE_MAX_FILE_SIZE_BYTES ?? 68719476736
 );
 const MAX_CONCURRENT_UPLOADS = 3;
 const MAX_AUTO_RETRIES = 5;
@@ -595,7 +595,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         .maybeSingle();
 
       if (!existingFile) {
-        const insertData: any = {
+        const insertData = {
           user_id: state.userId || currentUserId.current,
           name: fileName,
           size_bytes: file.size,
@@ -616,9 +616,9 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       setUploads(prev => ({ ...prev, [uploadId]: state }));
       await deleteUploadState(uploadId);
       toast.success(`${state.fileName} uploaded successfully!`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (!pausedUploads.current.has(uploadId)) {
-        state = { ...state, status: 'error', error: error.message || 'Upload failed', lastFailureAt: Date.now() };
+        state = { ...state, status: 'error', error: error instanceof Error ? error.message : 'Upload failed', lastFailureAt: Date.now() };
         uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
         setUploads(prev => ({ ...prev, [uploadId]: state }));
         await saveUploadState(state);
