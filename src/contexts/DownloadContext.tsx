@@ -28,7 +28,7 @@ export interface DownloadItem {
   speed: number;
   eta: number;
   createdAt: number;
-  files?: { name: string; path: string; size: number }[];
+  files?: DownloadFileRef[];
   isZip: boolean;
 }
 
