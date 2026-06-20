@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect, Re
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import * as tus from 'tus-js-client';
+import { buildChunkPath, MANUAL_CHUNK_SIZE_BYTES, shouldUseChunkedStorage } from '@/lib/chunkedStorage';
 
 const DB_NAME = 'CloudStoreUploads';
 const STORE_NAME = 'uploads';
@@ -10,7 +11,7 @@ const STORE_NAME = 'uploads';
 export const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
 // Max upload size (default 50GB) — overridable via env
 export const MAX_FILE_SIZE_BYTES = Number(
-  (import.meta as any).env?.VITE_MAX_FILE_SIZE_BYTES ?? 53687091200
+  import.meta.env?.VITE_MAX_FILE_SIZE_BYTES ?? 68719476736
 );
 const MAX_CONCURRENT_UPLOADS = 3;
 const MAX_AUTO_RETRIES = 5;
@@ -107,6 +108,7 @@ export interface UploadRequestInfo {
 
 export interface UploadItem {
   id: string;
+  userId?: string;
   fileName: string;
   fileSize: number;
   fileType: string;
@@ -148,6 +150,11 @@ export interface UploadDiagnostics {
   lastFailureAt: number | null;
   restoredFromStorage: boolean;
 }
+
+type TusErrorLike = Error & {
+  originalResponse?: { getStatus?: () => number; getBody?: () => string };
+  originalRequest?: { getMethod?: () => string; getURL?: () => string };
+};
 
 interface UploadContextType {
   uploads: Record<string, UploadItem>;
@@ -371,7 +378,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     return `${userId}_${file.name}_${file.size}_${file.lastModified}`;
   };
 
-  const calculateSpeed = (uploadId: string, newBytes: number): number => {
+  const calculateSpeed = useCallback((uploadId: string, newBytes: number): number => {
     const now = Date.now();
     if (!speedTracking.current[uploadId]) speedTracking.current[uploadId] = [];
     speedTracking.current[uploadId].push({ bytes: newBytes, timestamp: now });
@@ -381,7 +388,23 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     const timeDiff = (data[data.length - 1].timestamp - data[0].timestamp) / 1000;
     const bytesDiff = data[data.length - 1].bytes - data[0].bytes;
     return timeDiff > 0 ? bytesDiff / timeDiff : 0;
-  };
+  }, []);
+
+  const uploadChunkWithRetry = useCallback(async (chunk: Blob, path: string, retries = 0): Promise<void> => {
+    const { error } = await supabase.storage.from('user-files').upload(path, chunk, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: 'application/octet-stream',
+    });
+
+    if (error) {
+      if (retries < MAX_AUTO_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, getRetryDelay(retries)));
+        return uploadChunkWithRetry(chunk, path, retries + 1);
+      }
+      throw error;
+    }
+  }, []);
 
   const recordSpeedHistory = useCallback((uploadId: string, speed: number) => {
     const now = Date.now();
@@ -436,8 +459,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       const db = await openDB();
       const tx = db.transaction(STORE_NAME, 'readonly');
       const request = tx.objectStore(STORE_NAME).getAll();
-      const stored = await new Promise<any[]>((resolve, reject) => {
-        request.onsuccess = () => resolve((request.result as any[]) || []);
+      const stored = await new Promise<UploadItem[]>((resolve, reject) => {
+        request.onsuccess = () => resolve((request.result as UploadItem[]) || []);
         request.onerror = () => reject(request.error);
       });
       await new Promise((resolve, reject) => {
@@ -522,6 +545,98 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const startChunkedStorageUpload = useCallback(async (uploadId: string, initialState: UploadItem, file: File) => {
+    const totalChunks = Math.ceil(file.size / MANUAL_CHUNK_SIZE_BYTES);
+    const chunkPaths = Array.from({ length: totalChunks }, (_, index) => buildChunkPath(initialState.storagePath, index));
+    let state: UploadItem = {
+      ...initialState,
+      totalChunks,
+      status: 'uploading',
+      error: undefined,
+    };
+
+    uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
+    setUploads(prev => ({ ...prev, [uploadId]: state }));
+    await saveUploadState(state);
+
+    try {
+      for (let index = 0; index < totalChunks; index += 1) {
+        if (pausedUploads.current.has(uploadId)) {
+          state = { ...state, status: 'paused' };
+          uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
+          setUploads(prev => ({ ...prev, [uploadId]: state }));
+          await saveUploadState(state);
+          activeSlots.current.delete(uploadId);
+          fillSlots();
+          return;
+        }
+
+        if (!state.uploadedChunks.includes(index)) {
+          const start = index * MANUAL_CHUNK_SIZE_BYTES;
+          const end = Math.min(start + MANUAL_CHUNK_SIZE_BYTES, file.size);
+          await uploadChunkWithRetry(file.slice(start, end), chunkPaths[index]);
+
+          const uploadedChunks = [...state.uploadedChunks, index].sort((a, b) => a - b);
+          const bytesUploaded = Math.min(uploadedChunks.length * MANUAL_CHUNK_SIZE_BYTES, file.size);
+          state = {
+            ...state,
+            uploadedChunks,
+            bytesUploaded,
+            progress: Math.round((uploadedChunks.length / totalChunks) * 100),
+            speed: calculateSpeed(uploadId, bytesUploaded),
+          };
+          state.eta = state.speed > 0 ? (file.size - bytesUploaded) / state.speed : 0;
+          uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
+          setUploads(prev => ({ ...prev, [uploadId]: { ...state } }));
+          await saveUploadState(state);
+        }
+      }
+
+      const fileName = state.folderPath ? `${state.folderPath}/${state.fileName}` : state.fileName;
+      const { data: existingFile } = await supabase
+        .from('files')
+        .select('id')
+        .eq('storage_path', state.storagePath)
+        .maybeSingle();
+
+      if (!existingFile) {
+        const insertData = {
+          user_id: state.userId || currentUserId.current,
+          name: fileName,
+          size_bytes: file.size,
+          mime_type: state.fileType || 'application/octet-stream',
+          storage_path: state.storagePath,
+          folder_id: state.folderId ?? null,
+          upload_strategy: 'chunked',
+          chunk_size_bytes: MANUAL_CHUNK_SIZE_BYTES,
+          chunk_count: totalChunks,
+          chunk_paths: chunkPaths,
+        };
+        const { error: dbError } = await supabase.from('files').insert(insertData);
+        if (dbError) throw dbError;
+      }
+
+      state = { ...state, progress: 100, status: 'completed', bytesUploaded: file.size, autoRetryCount: 0 };
+      uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
+      setUploads(prev => ({ ...prev, [uploadId]: state }));
+      await deleteUploadState(uploadId);
+      toast.success(`${state.fileName} uploaded successfully!`);
+    } catch (error: unknown) {
+      if (!pausedUploads.current.has(uploadId)) {
+        state = { ...state, status: 'error', error: error instanceof Error ? error.message : 'Upload failed', lastFailureAt: Date.now() };
+        uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
+        setUploads(prev => ({ ...prev, [uploadId]: state }));
+        await saveUploadState(state);
+        if ((state.autoRetryCount || 0) < MAX_AUTO_RETRIES) scheduleAutoRetry(uploadId);
+        else toast.error(`${state.fileName} failed after ${MAX_AUTO_RETRIES} retries`);
+      }
+    } finally {
+      delete speedTracking.current[uploadId];
+      activeSlots.current.delete(uploadId);
+      fillSlots();
+    }
+  }, [calculateSpeed, deleteUploadState, fillSlots, saveUploadState, scheduleAutoRetry, uploadChunkWithRetry]);
+
   const startUpload = useCallback(async (uploadId: string) => {
     const upload = uploadsRef.current[uploadId];
     const file = fileRefs.current[uploadId];
@@ -530,11 +645,17 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       fillSlots();
       return;
     }
+    if (upload.userId) currentUserId.current = upload.userId;
 
     let state: UploadItem = { ...upload, status: 'uploading' };
     uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
     setUploads(prev => ({ ...prev, [uploadId]: state }));
     await saveUploadState(state);
+
+    if (shouldUseChunkedStorage(file.size)) {
+      await startChunkedStorageUpload(uploadId, state, file);
+      return;
+    }
 
     try {
       const accessToken = await getValidToken();
@@ -567,7 +688,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           cacheControl: '3600',
         },
         onShouldRetry: (err) => {
-          const status = (err as any)?.originalResponse?.getStatus?.();
+          const status = (err as TusErrorLike)?.originalResponse?.getStatus?.();
           // Never retry: auth failures or "payload too large"
           if (status === 401 || status === 403 || status === 413) return false;
           if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
@@ -602,11 +723,12 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onError: async (error) => {
           console.error('TUS upload error:', error);
-          const status = (error as any)?.originalResponse?.getStatus?.();
-          const requestMethod = (error as any)?.originalRequest?.getMethod?.() || state.lastRequest?.method || '';
-          const requestUrl = (error as any)?.originalRequest?.getURL?.() || state.lastRequest?.url || '';
+          const tusError = error as TusErrorLike;
+          const status = tusError.originalResponse?.getStatus?.();
+          const requestMethod = tusError.originalRequest?.getMethod?.() || state.lastRequest?.method || '';
+          const requestUrl = tusError.originalRequest?.getURL?.() || state.lastRequest?.url || '';
           const requestStep = getRequestStep(requestMethod, requestUrl);
-          const responseText = (error as any)?.originalResponse?.getBody?.() || state.lastRequest?.responseText || null;
+          const responseText = tusError.originalResponse?.getBody?.() || state.lastRequest?.responseText || null;
           incrementRetryCount();
           activeSlots.current.delete(uploadId);
           const errorMessage = error.message?.toLowerCase?.() || '';
@@ -744,8 +866,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             .maybeSingle();
 
           if (!existingFile) {
-            const insertData: any = {
-              user_id: currentUserId.current,
+            const insertData = {
+              user_id: state.userId || currentUserId.current,
               name: fileName,
               size_bytes: file.size,
               mime_type: state.fileType || 'application/octet-stream',
@@ -786,11 +908,11 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       }
 
       tusUpload.start();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload setup error:', error);
       activeSlots.current.delete(uploadId);
       if (!pausedUploads.current.has(uploadId)) {
-        state = { ...state, status: 'error', error: error.message || 'Upload failed' };
+        state = { ...state, status: 'error', error: error instanceof Error ? error.message : 'Upload failed' };
         uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
         setUploads(prev => ({ ...prev, [uploadId]: state }));
         await saveUploadState(state);
@@ -799,7 +921,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       }
       fillSlots();
     }
-  }, [saveUploadState, deleteUploadState, getValidToken, refreshAuthToken, fillSlots, scheduleAutoRetry, recordSpeedHistory, updateUploadRequestInfo]);
+  }, [saveUploadState, deleteUploadState, getValidToken, refreshAuthToken, fillSlots, scheduleAutoRetry, recordSpeedHistory, updateUploadRequestInfo, startChunkedStorageUpload]);
 
   const addFiles = useCallback((files: File[], userId: string, folderPath?: string, folderId?: string) => {
     currentUserId.current = userId;
@@ -830,6 +952,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
       newUploads[uploadId] = {
         id: uploadId,
+        userId,
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type,
@@ -905,6 +1028,13 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     }
 
     uploadQueue.current = uploadQueue.current.filter(qId => qId !== id);
+    const upload = uploadsRef.current[id];
+    if (upload && shouldUseChunkedStorage(upload.fileSize)) {
+      const paths = upload.uploadedChunks.map(index => buildChunkPath(upload.storagePath, index));
+      for (let i = 0; i < paths.length; i += 100) {
+        await supabase.storage.from('user-files').remove(paths.slice(i, i + 100));
+      }
+    }
     await deleteUploadState(id);
     delete fileRefs.current[id];
     delete authRetryAttempts.current[id];

@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { Download, Cloud, Lock } from 'lucide-react';
 import { FileIcon } from '@/components/FileIcon';
 import { formatBytes } from '@/lib/utils';
+import { downloadStoredFileBlob } from '@/lib/chunkedStorage';
+import { saveAs } from 'file-saver';
 import { format } from 'date-fns';
 
 interface FileData {
@@ -18,6 +20,10 @@ interface FileData {
   mime_type: string | null;
   storage_path: string;
   created_at: string;
+  upload_strategy?: string;
+  chunk_size_bytes?: number | null;
+  chunk_count?: number | null;
+  chunk_paths?: string[] | null;
 }
 
 const Share = () => {
@@ -92,7 +98,19 @@ const Share = () => {
 
       if (error) throw error;
 
-      if (data?.signedUrl) {
+      if (data?.file?.upload_strategy === 'chunked') {
+        const blob = await downloadStoredFileBlob({
+          storage_path: data.file.storage_path,
+          size_bytes: data.file.size_bytes,
+          mime_type: data.file.mime_type,
+          upload_strategy: data.file.upload_strategy,
+          chunk_size_bytes: data.file.chunk_size_bytes,
+          chunk_count: data.file.chunk_count,
+          chunk_paths: data.file.chunk_paths,
+        });
+        saveAs(blob, data.file.name);
+        toast.success('Download started');
+      } else if (data?.signedUrl) {
         window.open(data.signedUrl, '_blank');
         toast.success('Opening file...');
       } else {

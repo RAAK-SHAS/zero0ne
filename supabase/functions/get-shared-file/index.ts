@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
     // Get file details
     const { data: file, error: fileError } = await supabaseAdmin
       .from('files')
-      .select('id, name, size_bytes, mime_type, storage_path, created_at')
+      .select('id, name, size_bytes, mime_type, storage_path, created_at, upload_strategy, chunk_size_bytes, chunk_count, chunk_paths')
       .eq('id', share.file_id)
       .single();
 
@@ -141,6 +141,41 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'File not found' }),
         { status: 404, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (file.upload_strategy === 'chunked') {
+      const signedChunkPaths: string[] = [];
+      for (const path of file.chunk_paths ?? []) {
+        const { data: signedChunk, error: signedChunkError } = await supabaseAdmin.storage
+          .from('user-files')
+          .createSignedUrl(path, 300);
+        if (signedChunkError || !signedChunk) {
+          return new Response(
+            JSON.stringify({ error: 'Failed to generate download link' }),
+            { status: 500, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        signedChunkPaths.push(signedChunk.signedUrl);
+      }
+
+      return new Response(
+        JSON.stringify({
+          file: {
+            id: file.id,
+            name: file.name,
+            size_bytes: file.size_bytes,
+            mime_type: file.mime_type,
+            storage_path: file.storage_path,
+            created_at: file.created_at,
+            upload_strategy: file.upload_strategy,
+            chunk_size_bytes: file.chunk_size_bytes,
+            chunk_count: file.chunk_count,
+            chunk_paths: signedChunkPaths,
+          },
+          passwordRequired: !!share.password_hash
+        }),
+        { status: 200, headers: { ...wildcardCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -166,6 +201,7 @@ Deno.serve(async (req) => {
           name: file.name,
           size_bytes: file.size_bytes,
           mime_type: file.mime_type,
+          storage_path: file.storage_path,
           created_at: file.created_at
         },
         signedUrl: signedUrlData.signedUrl,

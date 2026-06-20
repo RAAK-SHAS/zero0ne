@@ -113,6 +113,9 @@ export type Database = {
       }
       files: {
         Row: {
+          chunk_count: number | null
+          chunk_paths: string[] | null
+          chunk_size_bytes: number | null
           created_at: string
           deleted_at: string | null
           encryption_algorithm: string | null
@@ -126,9 +129,13 @@ export type Database = {
           size_bytes: number
           storage_path: string
           tags: string[] | null
+          upload_strategy: string
           user_id: string
         }
         Insert: {
+          chunk_count?: number | null
+          chunk_paths?: string[] | null
+          chunk_size_bytes?: number | null
           created_at?: string
           deleted_at?: string | null
           encryption_algorithm?: string | null
@@ -142,9 +149,13 @@ export type Database = {
           size_bytes: number
           storage_path: string
           tags?: string[] | null
+          upload_strategy?: string
           user_id: string
         }
         Update: {
+          chunk_count?: number | null
+          chunk_paths?: string[] | null
+          chunk_size_bytes?: number | null
           created_at?: string
           deleted_at?: string | null
           encryption_algorithm?: string | null
@@ -158,6 +169,7 @@ export type Database = {
           size_bytes?: number
           storage_path?: string
           tags?: string[] | null
+          upload_strategy?: string
           user_id?: string
         }
         Relationships: [
