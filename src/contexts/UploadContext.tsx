@@ -860,7 +860,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             .maybeSingle();
 
           if (!existingFile) {
-            const insertData: any = {
+            const insertData = {
               user_id: state.userId || currentUserId.current,
               name: fileName,
               size_bytes: file.size,
