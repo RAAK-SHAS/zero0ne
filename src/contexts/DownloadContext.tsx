@@ -117,7 +117,7 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
     abortControllers.current[downloadId] = new AbortController();
     pausedDownloads.current.delete(downloadId);
 
-    let state: DownloadItem = { ...download, status: 'downloading' };
+    const state: DownloadItem = { ...download, status: 'downloading' };
     setDownloads(prev => ({ ...prev, [downloadId]: state }));
 
     try {
