@@ -151,6 +151,11 @@ export interface UploadDiagnostics {
   restoredFromStorage: boolean;
 }
 
+type TusErrorLike = Error & {
+  originalResponse?: { getStatus?: () => number; getBody?: () => string };
+  originalRequest?: { getMethod?: () => string; getURL?: () => string };
+};
+
 interface UploadContextType {
   uploads: Record<string, UploadItem>;
   isUploading: boolean;
@@ -454,8 +459,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       const db = await openDB();
       const tx = db.transaction(STORE_NAME, 'readonly');
       const request = tx.objectStore(STORE_NAME).getAll();
-      const stored = await new Promise<any[]>((resolve, reject) => {
-        request.onsuccess = () => resolve((request.result as any[]) || []);
+      const stored = await new Promise<UploadItem[]>((resolve, reject) => {
+        request.onsuccess = () => resolve((request.result as UploadItem[]) || []);
         request.onerror = () => reject(request.error);
       });
       await new Promise((resolve, reject) => {
@@ -683,7 +688,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           cacheControl: '3600',
         },
         onShouldRetry: (err) => {
-          const status = (err as any)?.originalResponse?.getStatus?.();
+          const status = (err as TusErrorLike)?.originalResponse?.getStatus?.();
           // Never retry: auth failures or "payload too large"
           if (status === 401 || status === 403 || status === 413) return false;
           if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
@@ -718,11 +723,12 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         },
         onError: async (error) => {
           console.error('TUS upload error:', error);
-          const status = (error as any)?.originalResponse?.getStatus?.();
-          const requestMethod = (error as any)?.originalRequest?.getMethod?.() || state.lastRequest?.method || '';
-          const requestUrl = (error as any)?.originalRequest?.getURL?.() || state.lastRequest?.url || '';
+          const tusError = error as TusErrorLike;
+          const status = tusError.originalResponse?.getStatus?.();
+          const requestMethod = tusError.originalRequest?.getMethod?.() || state.lastRequest?.method || '';
+          const requestUrl = tusError.originalRequest?.getURL?.() || state.lastRequest?.url || '';
           const requestStep = getRequestStep(requestMethod, requestUrl);
-          const responseText = (error as any)?.originalResponse?.getBody?.() || state.lastRequest?.responseText || null;
+          const responseText = tusError.originalResponse?.getBody?.() || state.lastRequest?.responseText || null;
           incrementRetryCount();
           activeSlots.current.delete(uploadId);
           const errorMessage = error.message?.toLowerCase?.() || '';
