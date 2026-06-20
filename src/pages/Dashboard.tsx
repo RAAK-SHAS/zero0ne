@@ -492,8 +492,8 @@ const Dashboard = () => {
       URL.revokeObjectURL(url);
       toast.success(`Downloaded ${sel.length} files as ZIP`);
       setSelectedFiles([]);
-    } catch (e: any) {
-      toast.error(e.message || 'ZIP download failed');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'ZIP download failed');
     }
   };
 
@@ -591,8 +591,8 @@ const Dashboard = () => {
       setEditFile(file);
       setEditFileUrl(data.signedUrl);
       setEditType(type);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load file for editing');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load file for editing');
     }
   };
 
