@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export const CHUNKED_UPLOAD_THRESHOLD_BYTES = 512 * 1024 * 1024;
-export const MANUAL_CHUNK_SIZE_BYTES = 8 * 1024 * 1024;
+export const MANUAL_CHUNK_SIZE_BYTES = 4 * 1024 * 1024;
 const STORAGE_BUCKET = 'user-files';
 
 export type SaveFileHandle = {
