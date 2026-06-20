@@ -108,6 +108,7 @@ export interface UploadRequestInfo {
 
 export interface UploadItem {
   id: string;
+  userId?: string;
   fileName: string;
   fileSize: number;
   fileType: string;
@@ -595,7 +596,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
       if (!existingFile) {
         const insertData: any = {
-          user_id: currentUserId.current,
+          user_id: state.userId || currentUserId.current,
           name: fileName,
           size_bytes: file.size,
           mime_type: state.fileType || 'application/octet-stream',
@@ -859,7 +860,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
           if (!existingFile) {
             const insertData: any = {
-              user_id: currentUserId.current,
+              user_id: state.userId || currentUserId.current,
               name: fileName,
               size_bytes: file.size,
               mime_type: state.fileType || 'application/octet-stream',
@@ -944,6 +945,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
       newUploads[uploadId] = {
         id: uploadId,
+        userId,
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type,
