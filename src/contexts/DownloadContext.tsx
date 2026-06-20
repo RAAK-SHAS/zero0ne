@@ -2,7 +2,11 @@ import { createContext, useContext, useState, useCallback, useRef, ReactNode } f
 import { toast } from 'sonner';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { downloadChunkedStoredFileToDisk, downloadStoredFileBlob, StoredFileMetadata } from '@/lib/chunkedStorage';
+import { downloadChunkedStoredFileToDisk, downloadStoredFileBlob, SaveFileHandle, StoredFileMetadata } from '@/lib/chunkedStorage';
+
+type SaveFilePickerWindow = Window & {
+  showSaveFilePicker?: (options: { suggestedName: string }) => Promise<SaveFileHandle>;
+};
 
 type DownloadFileRef = {
   id?: string;
@@ -14,7 +18,7 @@ type DownloadFileRef = {
   chunkSizeBytes?: number | null;
   chunkCount?: number | null;
   chunkPaths?: string[] | null;
-  saveHandle?: Promise<any> | any;
+  saveHandle?: Promise<SaveFileHandle | null> | SaveFileHandle | null;
 };
 
 export interface DownloadItem {
@@ -200,10 +204,10 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
       }
 
       setDownloads(prev => ({ ...prev, [downloadId]: state }));
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (!pausedDownloads.current.has(downloadId)) {
         state.status = 'error';
-        state.error = error.message || 'Download failed';
+        state.error = error instanceof Error ? error.message : 'Download failed';
         setDownloads(prev => ({ ...prev, [downloadId]: state }));
         toast.error(`Failed to download ${state.fileName}`);
       }
@@ -217,9 +221,10 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
 
   const downloadFile = useCallback((fileId: string, fileName: string, storagePath: string, size: number, metadata?: Partial<DownloadFileRef>) => {
     const downloadId = `single_${fileId}_${Date.now()}`;
-    const saveHandle = metadata?.uploadStrategy === 'chunked' && (window as any).showSaveFilePicker
-      ? (window as any).showSaveFilePicker({ suggestedName: fileName }).catch((error: any) => {
-          if (error?.name !== 'AbortError') console.error('Save picker failed:', error);
+    const pickerWindow = window as SaveFilePickerWindow;
+    const saveHandle = metadata?.uploadStrategy === 'chunked' && pickerWindow.showSaveFilePicker
+      ? pickerWindow.showSaveFilePicker({ suggestedName: fileName }).catch((error: unknown) => {
+          if (!(error instanceof DOMException && error.name === 'AbortError')) console.error('Save picker failed:', error);
           return null;
         })
       : undefined;
