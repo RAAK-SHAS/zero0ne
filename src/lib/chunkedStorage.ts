@@ -48,8 +48,15 @@ export const downloadStoredFileBlob = async (
     for (const path of file.chunk_paths || []) {
       if (options?.signal?.aborted) throw new DOMException('Download aborted', 'AbortError');
 
-      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path);
-      if (error || !data) throw error || new Error('Failed to download file chunk');
+      const data = path.startsWith('http')
+        ? await fetch(path, { signal: options?.signal }).then((response) => {
+            if (!response.ok) throw new Error('Failed to download file chunk');
+            return response.blob();
+          })
+        : await supabase.storage.from(STORAGE_BUCKET).download(path).then(({ data, error }) => {
+            if (error || !data) throw error || new Error('Failed to download file chunk');
+            return data;
+          });
 
       chunks.push(data);
       downloaded += data.size;
@@ -102,8 +109,15 @@ export const downloadChunkedStoredFileToDisk = async (
     for (const path of file.chunk_paths || []) {
       if (options?.signal?.aborted) throw new DOMException('Download aborted', 'AbortError');
 
-      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path);
-      if (error || !data) throw error || new Error('Failed to download file chunk');
+      const data = path.startsWith('http')
+        ? await fetch(path, { signal: options?.signal }).then((response) => {
+            if (!response.ok) throw new Error('Failed to download file chunk');
+            return response.blob();
+          })
+        : await supabase.storage.from(STORAGE_BUCKET).download(path).then(({ data, error }) => {
+            if (error || !data) throw error || new Error('Failed to download file chunk');
+            return data;
+          });
 
       await writable.write(data);
       downloaded += data.size;
