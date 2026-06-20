@@ -93,6 +93,7 @@ export const downloadChunkedStoredFileToDisk = async (
   let handle: any;
   if (options?.saveHandle) {
     handle = await options.saveHandle;
+    if (!handle) throw new DOMException('Download cancelled', 'AbortError');
   } else {
     try {
       handle = await (window as any).showSaveFilePicker({ suggestedName: fileName });
@@ -101,7 +102,6 @@ export const downloadChunkedStoredFileToDisk = async (
       return false;
     }
   }
-  if (!handle) return false;
   const writable = await handle.createWritable();
   let downloaded = 0;
 
