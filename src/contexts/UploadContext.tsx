@@ -908,11 +908,11 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       }
 
       tusUpload.start();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload setup error:', error);
       activeSlots.current.delete(uploadId);
       if (!pausedUploads.current.has(uploadId)) {
-        state = { ...state, status: 'error', error: error.message || 'Upload failed' };
+        state = { ...state, status: 'error', error: error instanceof Error ? error.message : 'Upload failed' };
         uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
         setUploads(prev => ({ ...prev, [uploadId]: state }));
         await saveUploadState(state);
