@@ -4,6 +4,18 @@ export const CHUNKED_UPLOAD_THRESHOLD_BYTES = 512 * 1024 * 1024;
 export const MANUAL_CHUNK_SIZE_BYTES = 8 * 1024 * 1024;
 const STORAGE_BUCKET = 'user-files';
 
+export type SaveFileHandle = {
+  createWritable: () => Promise<{
+    write: (data: Blob) => Promise<void>;
+    close: () => Promise<void>;
+    abort: () => Promise<void>;
+  }>;
+};
+
+type SaveFilePickerWindow = Window & {
+  showSaveFilePicker?: (options: { suggestedName: string }) => Promise<SaveFileHandle>;
+};
+
 export interface StoredFileMetadata {
   storage_path: string;
   size_bytes: number;
@@ -85,20 +97,21 @@ export const downloadChunkedStoredFileToDisk = async (
   options?: {
     signal?: AbortSignal;
     onProgress?: (bytesDownloaded: number) => void;
-    saveHandle?: Promise<any> | any;
+    saveHandle?: Promise<SaveFileHandle | null> | SaveFileHandle | null;
   }
 ) => {
-  if (!isChunkedStoredFile(file) || !(window as any).showSaveFilePicker) return false;
+  const pickerWindow = window as SaveFilePickerWindow;
+  if (!isChunkedStoredFile(file) || !pickerWindow.showSaveFilePicker) return false;
 
-  let handle: any;
+  let handle: SaveFileHandle | null;
   if (options?.saveHandle) {
     handle = await options.saveHandle;
     if (!handle) throw new DOMException('Download cancelled', 'AbortError');
   } else {
     try {
-      handle = await (window as any).showSaveFilePicker({ suggestedName: fileName });
-    } catch (error: any) {
-      if (error?.name === 'AbortError') throw error;
+      handle = await pickerWindow.showSaveFilePicker({ suggestedName: fileName });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
       return false;
     }
   }
