@@ -328,6 +328,7 @@ export const TerminalPanel = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             onClick={onToggle}
+            aria-label="Open Advanced Terminal"
             className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-border/80 bg-card/95 px-3 py-2 shadow-lg transition-all duration-200 group hover:border-primary/40"
           >
             <Terminal className="h-4 w-4 text-primary" />
@@ -408,12 +409,14 @@ export const TerminalPanel = ({
                   </DropdownMenu>
                   <button
                     onClick={() => setIsMaximized(!isMaximized)}
+                    aria-label={isMaximized ? 'Restore terminal size' : 'Maximize terminal'}
                     className={cn('p-1 rounded hover:bg-muted/50 transition-colors', t.info)}
                   >
                     {isMaximized ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
                   </button>
                   <button
                     onClick={onToggle}
+                    aria-label="Close terminal"
                     className={cn('p-1 rounded hover:bg-muted/50 transition-colors', t.info)}
                   >
                     {isMaximized ? <X className="h-3 w-3" /> : <Minus className="h-3 w-3" />}

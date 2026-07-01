@@ -68,17 +68,11 @@ export const useFolders = (userId: string | undefined) => {
     };
   }, [userId, loadFolders]);
 
-  // Clear unlocked folders on page visibility change (simulates logout/refresh)
+  // Clear unlocked folders when the tab is closed / refreshed
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) return;
-      // Don't clear on tab focus, only on actual navigation/refresh
-    };
-    
     const handleBeforeUnload = () => {
       setUnlockedFolders(new Set());
     };
-
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);

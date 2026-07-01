@@ -43,7 +43,8 @@ const Trash = () => {
   const [profile, setProfile] = useState<{ storage_used_bytes: number; storage_quota_bytes: number } | null>(null);
 
   useEffect(() => {
-    loadFiles();
+    // Opportunistically purge files older than 30 days on every visit
+    (async () => { try { await (supabase.rpc as any)('cleanup_old_trash'); } catch {} loadFiles(); })();
     if (user) {
       supabase.from('profiles').select('storage_used_bytes, storage_quota_bytes').eq('id', user.id).single().then(({ data }) => {
         if (data) setProfile(data);

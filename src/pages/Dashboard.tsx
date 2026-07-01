@@ -140,7 +140,8 @@ const Dashboard = () => {
   const [editType, setEditType] = useState<'pdf' | 'video' | 'audio' | 'image' | 'markdown' | null>(null);
   
   const { addFiles, isUploading, uploads, resumeUpload, cancelUpload, getPausedUploadsNeedingFile } = useUploadManager();
-  const { downloadFile } = useDownloadManager();
+  const { downloadFile, downloadMultipleAsZip } = useDownloadManager();
+  const [sharedFileIds, setSharedFileIds] = useState<Set<string>>(new Set());
   const { toggleFavorite } = useFavorites();
   const { logActivity } = useActivityLog(user?.id);
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
@@ -217,9 +218,10 @@ const Dashboard = () => {
     if (!user) return;
 
     try {
-      const [profileRes, filesRes] = await Promise.all([
+      const [profileRes, filesRes, sharesRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('files').select('*').is('deleted_at', null).order('created_at', { ascending: false })
+        supabase.from('files').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+        supabase.from('shares').select('file_id'),
       ]);
 
       if (profileRes.error) throw profileRes.error;
@@ -227,12 +229,14 @@ const Dashboard = () => {
 
       setProfile(profileRes.data);
       setFiles(filesRes.data || []);
+      setSharedFileIds(new Set((sharesRes.data || []).map((s: any) => s.file_id)));
     } catch (error: any) {
       toast.error(error.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleReselectFile = (uploadId: string, fileName: string) => {
     setResumeUploadId(uploadId);
@@ -468,33 +472,23 @@ const Dashboard = () => {
       await handleDownload(sel[0].id);
       return;
     }
-    toast.info(`Packaging ${sel.length} files…`);
-    try {
-      const zip = new JSZip();
-      for (const file of sel) {
-        const blob = await downloadStoredFileBlob({
-          storage_path: file.storage_path,
-          size_bytes: file.size_bytes,
-          mime_type: file.mime_type,
-          upload_strategy: file.upload_strategy,
-          chunk_size_bytes: file.chunk_size_bytes,
-          chunk_count: file.chunk_count,
-          chunk_paths: file.chunk_paths,
-        });
-        zip.file(file.name, blob);
-      }
-      const blob = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cloudstore-${Date.now()}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success(`Downloaded ${sel.length} files as ZIP`);
-      setSelectedFiles([]);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'ZIP download failed');
-    }
+    // Route through DownloadContext so users get progress, pause, cancel, ETA
+    downloadMultipleAsZip(
+      sel.map(f => ({
+        id: f.id,
+        name: f.name,
+        path: f.storage_path,
+        size: f.size_bytes,
+        mimeType: f.mime_type,
+        uploadStrategy: f.upload_strategy,
+        chunkSizeBytes: f.chunk_size_bytes,
+        chunkCount: f.chunk_count,
+        chunkPaths: f.chunk_paths,
+      })),
+      `cloudstore-${Date.now()}.zip`,
+    );
+    toast.info(`Preparing ZIP of ${sel.length} files…`);
+    setSelectedFiles([]);
   };
 
   const handleBatchShare = async () => {
@@ -672,9 +666,7 @@ const Dashboard = () => {
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       baseFiles = files.filter(f => new Date(f.created_at) >= sevenDaysAgo);
     } else if (currentView === 'shared') {
-      // For now, show files that have been shared (we'd need to query shares table)
-      // This is a simplified version - show all files as a placeholder
-      baseFiles = files;
+      baseFiles = files.filter(f => sharedFileIds.has(f.id));
     }
 
     return baseFiles
@@ -725,7 +717,7 @@ const Dashboard = () => {
         
         return direction === 'asc' ? comparison : -comparison;
       });
-  }, [files, currentFolderId, searchQuery, filterFavorites, filterTag, filterType, sortConfig, currentView]);
+  }, [files, currentFolderId, searchQuery, filterFavorites, filterTag, filterType, sortConfig, currentView, sharedFileIds]);
 
   const currentFolders = getChildFolders(currentFolderId);
   const currentPath = getCurrentPath();
@@ -759,7 +751,7 @@ const Dashboard = () => {
         onUploadClick={() => navigate('/upload')}
         onNewFolderClick={() => setShowCreateFolder(true)}
         recentCount={recentCount}
-        sharedCount={0}
+        sharedCount={sharedFileIds.size}
         typeCounts={quickTypeCounts}
         onQuickFilterClick={(filter) => {
           setCurrentFolderId(null);

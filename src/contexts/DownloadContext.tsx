@@ -61,6 +61,14 @@ export const useDownloadManager = () => {
 
 export const DownloadProvider = ({ children }: { children: ReactNode }) => {
   const [downloads, setDownloads] = useState<Record<string, DownloadItem>>({});
+  const downloadsRef = useRef<Record<string, DownloadItem>>({});
+  const setDownloadsBoth = useCallback((updater: (prev: Record<string, DownloadItem>) => Record<string, DownloadItem>) => {
+    setDownloads(prev => {
+      const next = updater(prev);
+      downloadsRef.current = next;
+      return next;
+    });
+  }, []);
   const [isDownloading, setIsDownloading] = useState(false);
   const abortControllers = useRef<Record<string, AbortController>>({});
   const pausedDownloads = useRef<Set<string>>(new Set());
@@ -105,7 +113,7 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const downloadId = downloadQueue.current[0];
-    const download = downloads[downloadId];
+    const download = downloadsRef.current[downloadId];
     
     if (!download) {
       downloadQueue.current.shift();
@@ -217,7 +225,7 @@ export const DownloadProvider = ({ children }: { children: ReactNode }) => {
       downloadQueue.current.shift();
       processNextInQueue();
     }
-  }, [downloads]);
+  }, []);
 
   const downloadFile = useCallback((fileId: string, fileName: string, storagePath: string, size: number, metadata?: Partial<DownloadFileRef>) => {
     const downloadId = `single_${fileId}_${Date.now()}`;

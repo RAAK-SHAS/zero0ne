@@ -613,7 +613,16 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
           chunk_paths: chunkPaths,
         };
         const { error: dbError } = await supabase.from('files').insert(insertData);
-        if (dbError) throw dbError;
+        if (dbError) {
+          // Prevent orphaned chunks in storage when DB insert fails
+          try {
+            const { removeStoragePaths } = await import('@/lib/chunkedStorage');
+            await removeStoragePaths(chunkPaths);
+          } catch (cleanupErr) {
+            console.error('Failed to cleanup orphaned chunks:', cleanupErr);
+          }
+          throw dbError;
+        }
       }
 
       state = { ...state, progress: 100, status: 'completed', bytesUploaded: file.size, autoRetryCount: 0 };
@@ -661,9 +670,12 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
       const accessToken = await getValidToken();
       if (!accessToken) throw new Error('Not authenticated');
 
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'ttrbjdpiccvfaccwpodu';
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      if (!projectId || !anonKey) {
+        throw new Error('Upload configuration missing (VITE_SUPABASE_PROJECT_ID / VITE_SUPABASE_PUBLISHABLE_KEY).');
+      }
       const storageHost = `https://${projectId}.storage.supabase.co`;
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0cmJqZHBpY2N2ZmFjY3dwb2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1ODY0MzMsImV4cCI6MjA4MDE2MjQzM30.FvgQ19ihD7nd4Ty4QSrbnYoUwm2RNGnLf032-j_yG4M';
 
       // IMPORTANT: Do NOT set Authorization in initial headers.
       // tus-js-client appends duplicate header values if the same header is set both
