@@ -179,10 +179,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create a signed URL using service role (60 second expiry)
+    // Create a signed URL using service role (15 minute expiry — gives slow connections time to start)
     const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
       .from('user-files')
-      .createSignedUrl(file.storage_path, 60);
+      .createSignedUrl(file.storage_path, 900);
 
     if (signedUrlError || !signedUrlData) {
       console.error('Failed to create signed URL');
