@@ -127,6 +127,7 @@ export const AppSidebar = ({
           <NavItem icon={FolderOpen} label="My Files" active={isActive('/dashboard')} onClick={() => navigate('/dashboard')} />
           <NavItem icon={Clock3} label="Recent" count={recentCount} active={isActive('view=recent')} onClick={() => navigate('/dashboard?view=recent')} />
           <NavItem icon={Share2} label="Shared" count={sharedCount} active={isActive('view=shared')} onClick={() => navigate('/dashboard?view=shared')} />
+          <NavItem icon={UploadCloud} label="Uploads" active={isActive('/uploads')} onClick={() => navigate('/uploads')} />
           <NavItem icon={Trash2} label="Trash" active={isActive('/trash')} onClick={() => navigate('/trash')} />
         </div>
         {typeCounts && onQuickFilterClick && (
