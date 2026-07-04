@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Cloud, FolderOpen, Clock3, Trash2, Settings, LogOut, Upload, Share2, Plus, Image, FileText, Code2,
-  Keyboard, ChevronLeft,
+  Keyboard, ChevronLeft, UploadCloud,
 } from 'lucide-react';
 
 interface AppSidebarProps {
