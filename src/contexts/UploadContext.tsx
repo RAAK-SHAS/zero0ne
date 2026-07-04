@@ -754,12 +754,42 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             updatedAt: Date.now(),
           });
 
-          // 413: file too large — stop ALL retries and show it only in the upload panel
+          // 413: TUS proxy request-size limit hit. If we still have the file object
+          // and it qualifies for chunked upload, transparently fall back to the
+          // manual chunked path (4MB PUTs) which bypasses the TUS proxy limit.
           if (status === 413 || errorMessage.includes('maximum size exceeded')) {
             if (autoRetryTimers.current[uploadId]) {
               clearTimeout(autoRetryTimers.current[uploadId]);
               delete autoRetryTimers.current[uploadId];
             }
+            try {
+              tusUpload.abort(true);
+            } catch { /* ignore */ }
+            delete tusUploads.current[uploadId];
+            delete speedTracking.current[uploadId];
+            delete authRetryAttempts.current[uploadId];
+
+            const localFile = fileRefs.current[uploadId];
+            if (localFile && localFile.size >= 4 * 1024 * 1024) {
+              toast.info(`Switching ${state.fileName} to chunked upload…`);
+              state = {
+                ...state,
+                status: 'uploading',
+                error: undefined,
+                bytesUploaded: 0,
+                progress: 0,
+                uploadedChunks: [],
+                tusUploadUrl: undefined,
+                autoRetryCount: 0,
+                nextRetryAt: undefined,
+              };
+              uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
+              setUploads(prev => ({ ...prev, [uploadId]: state }));
+              await saveUploadState(state);
+              await startChunkedStorageUpload(uploadId, state, localFile);
+              return;
+            }
+
             pausedUploads.current.add(uploadId);
             state = {
               ...state,
@@ -778,9 +808,6 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             uploadsRef.current = { ...uploadsRef.current, [uploadId]: state };
             setUploads(prev => ({ ...prev, [uploadId]: state }));
             await saveUploadState(state);
-            delete tusUploads.current[uploadId];
-            delete speedTracking.current[uploadId];
-            delete authRetryAttempts.current[uploadId];
             activeSlots.current.delete(uploadId);
             fillSlots();
             return;
