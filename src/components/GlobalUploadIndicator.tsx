@@ -292,6 +292,14 @@ export const GlobalUploadIndicator = () => {
             </Button>
           </div>
         )}
+        <div className="p-2 border-t">
+          <Button asChild variant="ghost" size="sm" className="w-full text-xs gap-1.5">
+            <Link to="/uploads">
+              <Maximize2 className="h-3 w-3" />
+              Open full upload manager
+            </Link>
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   );
