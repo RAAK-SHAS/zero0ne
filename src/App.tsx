@@ -14,6 +14,7 @@ import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Upload from "./pages/Upload";
+import Uploads from "./pages/Uploads";
 import Share from "./pages/Share";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
