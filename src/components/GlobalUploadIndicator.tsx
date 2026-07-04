@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Maximize2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -290,6 +292,14 @@ export const GlobalUploadIndicator = () => {
             </Button>
           </div>
         )}
+        <div className="p-2 border-t">
+          <Button asChild variant="ghost" size="sm" className="w-full text-xs gap-1.5">
+            <Link to="/uploads">
+              <Maximize2 className="h-3 w-3" />
+              Open full upload manager
+            </Link>
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   );
